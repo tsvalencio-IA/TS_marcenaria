@@ -3,145 +3,519 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AutoCAD Marcenaria IA - Engenharia Definitiva</title>
+    <title>Gerador de Projetos e Orçamentos para Marcenaria - thIAguinho Soluções</title>
+    <meta name="description" content="Sistema CAD 3D Inteligente com Orçamento Real e Validação de Engenharia de Marcenaria.">
     
-    <!-- Fontes e Ícones -->
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    
-    <!-- Estilos Separados -->
-    <link rel="stylesheet" href="style.css">
-
-    <!-- Bibliotecas 3D -->
+    <!-- Bibliotecas Externas (CDNs Oficiais) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/stats.min.js"></script>
+    
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --secondary: #0f172a;
+            --accent: #f59e0b;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --radius: 12px;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        
+        body {
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            background: var(--surface);
+            padding: 1rem 1.5rem;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-logo {
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .brand-text h1 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--secondary);
+        }
+
+        .brand-text span {
+            font-size: 0.75rem;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-secondary { background: #e2e8f0; color: var(--text); }
+        .btn-secondary:hover { background: #cbd5e1; }
+        .btn-danger { background: var(--danger); color: white; }
+        
+        /* Main Layout */
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 320px 1fr 340px;
+            gap: 1rem;
+            padding: 1rem;
+            overflow: hidden;
+        }
+
+        @media (max-width: 1024px) {
+            main { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; overflow-y: auto; }
+            body { overflow: auto; }
+        }
+
+        /* Panels */
+        .panel {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 100%;
+        }
+
+        .panel-header {
+            padding: 1rem;
+            background: #f1f5f9;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-content {
+            padding: 1rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        /* Canvas Container */
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #eef2f6;
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; outline: none; }
+
+        /* HUD Overlay */
+        #hud {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+        }
+
+        #hud .row { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+        #hud .label { color: var(--text-light); }
+        #hud .value { font-weight: 600; color: var(--secondary); }
+
+        /* Assistant IA */
+        .ai-section { margin-bottom: 1.5rem; }
+        .ai-box {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .ai-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .ai-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .ai-btn {
+            background: white;
+            border: 1px solid #cbd5e1;
+            padding: 0.6rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+        .ai-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .ai-btn.full { grid-column: span 2; }
+        
+        /* Module List */
+        .module-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .module-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .module-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .module-card.selected { border-color: var(--accent); background: #fffbeb; }
+        .module-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem; }
+        .module-meta { font-size: 0.75rem; color: var(--text-light); }
+        .module-oracle {
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .oracle-ok { background: #d1fae5; color: #065f46; }
+        .oracle-warn { background: #fef3c7; color: #92400e; }
+        .oracle-err { background: #fee2e2; color: #991b1b; }
+
+        .btn-add {
+            width: 100%;
+            margin-top: 0.5rem;
+            background: var(--secondary);
+            color: white;
+        }
+
+        /* AR / Cam */
+        .ar-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+        .ar-status {
+            background: #f1f5f9;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+        .file-input {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px dashed #cbd5e1;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+        }
+
+        /* Costs */
+        .cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
+        .input-group { display: flex; flex-direction: column; gap: 0.25rem; }
+        .input-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-light); }
+        .input-group input {
+            padding: 0.6rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .input-group input:focus { border-color: var(--primary); outline: none; }
+        
+        .bom-result {
+            background: var(--secondary);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .bom-label { font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.25rem; }
+        .bom-value { font-size: 1.5rem; font-weight: 700; }
+        .bom-breakdown {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            font-size: 0.8rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        /* API Settings Modal */
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3);
+        }
+        .modal-header {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        /* Notifications */
+        #notifications {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 2000;
+        }
+        .toast {
+            background: var(--surface);
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
+            border-left: 4px solid var(--primary);
+            min-width: 280px;
+            animation: slideIn 0.3s ease;
+        }
+        .toast.error { border-left-color: var(--danger); }
+        .toast.success { border-left-color: var(--success); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* Helpers */
+        .hidden { display: none !important; }
+        .text-xs { font-size: 0.75rem; }
+        .text-sm { font-size: 0.875rem; }
+        .font-bold { font-weight: 700; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+    </style>
 </head>
 <body>
 
-    <!-- Header Principal -->
-    <header class="app-header">
-        <h1><i class="fas fa-cube"></i> AutoCAD Marcenaria IA</h1>
-        <button id="btnSettings" class="icon-btn" onclick="toggleModal('modalSettings')"><i class="fas fa-cog"></i></button>
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-logo">th</div>
+            <div class="brand-text">
+                <h1>thIAguinho Soluções | CAD</h1>
+                <span>POWERED BY THIAGUINHO SOLUÇÕES</span>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="App.ui.toggleModal('api-modal')">
+                ⚙️ API Settings
+            </button>
+            <button class="btn btn-primary" onclick="App.project.export()">
+                💾 Salvar Projeto
+            </button>
+        </div>
     </header>
 
-    <!-- Contêiner do Motor 3D -->
-    <div id="canvas-container">
-        <!-- O Three.js renderizará aqui -->
-    </div>
-
-    <!-- HUD Flutuante - Controles Rápidos -->
-    <div class="floating-controls">
-        <button class="fab-btn primary" onclick="toggleHUD('hudIA')"><i class="fas fa-robot"></i><br><span>Auto IA</span></button>
-        <button class="fab-btn" onclick="toggleHUD('hudLista')"><i class="fas fa-list"></i><br><span>Módulos</span></button>
-        <button class="fab-btn" onclick="toggleHUD('hudPerspectiva')"><i class="fas fa-camera"></i><br><span>Câmera</span></button>
-        <button class="fab-btn success" onclick="toggleHUD('hudOrcamento')"><i class="fas fa-file-invoice-dollar"></i><br><span>Custos</span></button>
-    </div>
-
-    <!-- Indicador de Status/Loading -->
-    <div id="statusOverlay" class="status-overlay" style="display: none;">
-        <div class="loader"></div>
-        <p id="statusText">Processando IA...</p>
-    </div>
-
-    <!-- ================= HUDs (Bottom Sheets) ================= -->
-
-    <!-- HUD: Inteligência Artificial -->
-    <div id="hudIA" class="bottom-sheet">
-        <div class="sheet-header">
-            <h3><i class="fas fa-magic"></i> Escanear Ambiente</h3>
-            <button class="close-btn" onclick="toggleHUD('hudIA')"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="sheet-body">
-            <p>Tire uma foto ou grave um áudio para a IA modelar o ambiente completo automaticamente.</p>
-            <input type="file" id="fotoCliente" accept="image/*" class="file-input">
-            <label for="fotoCliente" class="btn-block"><i class="fas fa-camera"></i> Selecionar Foto / Tirar Foto</label>
-            <button class="btn-block action-btn" onclick="analisarComIA()"><i class="fas fa-brain"></i> Gerar Projeto 3D (Multi-Módulos)</button>
-            <div id="iaErrorBox" class="error-box"></div>
-        </div>
-    </div>
-
-    <!-- HUD: Lista de Módulos (Bill of Materials) -->
-    <div id="hudLista" class="bottom-sheet">
-        <div class="sheet-header">
-            <h3><i class="fas fa-layer-group"></i> Módulos Identificados</h3>
-            <button class="close-btn" onclick="toggleHUD('hudLista')"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="sheet-body">
-            <div id="listaModulosContainer">
-                <!-- Populado via JS -->
+    <!-- Main -->
+    <main>
+        <!-- Left Panel: Assistant & Modules -->
+        <aside class="panel">
+            <div class="panel-header">
+                <span>Assistente & Módulos</span>
             </div>
-            <button class="btn-block success" onclick="adicionarModuloManual()"><i class="fas fa-plus"></i> Adicionar Módulo Manual</button>
-        </div>
-    </div>
+            <div class="panel-content">
+                <!-- IA Assistant -->
+                <div class="ai-section">
+                    <div class="ai-box">
+                        <div class="ai-title">✨ Inteligência Artificial thIAguinho</div>
+                        <div class="ai-controls">
+                            <button class="ai-btn" onclick="App.ai.recordVoice()">🎤 Gravar Voz</button>
+                            <button class="ai-btn" onclick="App.ai.sendAudio()">📤 Enviar Áudio</button>
+                            <button class="ai-btn full" onclick="document.getElementById('photo-input').click()">
+                                📷 Foto da Parede / Ambiente
+                            </button>
+                        </div>
+                        <input type="file" id="photo-input" class="hidden" accept="image/*" onchange="App.ai.processPhoto(this)">
+                        <div class="text-xs text-light mt-2">Gerar Marcenaria de Precisão a partir de contexto visual ou voz.</div>
+                    </div>
+                </div>
 
-    <!-- HUD: Perspectiva e AR -->
-    <div id="hudPerspectiva" class="bottom-sheet">
-        <div class="sheet-header">
-            <h3><i class="fas fa-arrows-alt"></i> Controles AR & Câmera</h3>
-            <button class="close-btn" onclick="toggleHUD('hudPerspectiva')"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="sheet-body">
-            <p><small>Arraste pela tela para mover os móveis. Use dois dedos para rotacionar a câmera.</small></p>
-            <div class="grid-2-col">
-                <button class="btn-block" onclick="resetCamera()"><i class="fas fa-video"></i> Reset Câmera</button>
-                <button class="btn-block action-btn" onclick="toggleARMode()"><i class="fas fa-hand-pointer"></i> <span id="arBtnText">Modo AR: OFF</span></button>
+                <!-- Modules -->
+                <div class="mb-2 font-bold text-sm">Módulos do Projeto</div>
+                <div class="text-xs text-light mb-2">Segure o dedo sobre o móvel no 3D para abrir o Editor Live.</div>
+                
+                <div id="module-list" class="module-list">
+                    <!-- Modules injected by JS -->
+                </div>
+
+                <button class="btn btn-add" onclick="App.modules.addGeneric()">
+                    ➕ Novo Módulo Avulso
+                </button>
             </div>
-        </div>
-    </div>
+        </aside>
 
-    <!-- HUD: Orçamento e Custos -->
-    <div id="hudOrcamento" class="bottom-sheet">
-        <div class="sheet-header">
-            <h3><i class="fas fa-calculator"></i> Custos e Plano de Corte</h3>
-            <button class="close-btn" onclick="toggleHUD('hudOrcamento')"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="sheet-body">
-            <div class="cost-grid">
-                <div class="input-group">
-                    <label>Chapa MDF (m²)</label>
-                    <input type="number" id="precoM2" value="95.00" onchange="calcularCustosGlobais()">
-                </div>
-                <div class="input-group">
-                    <label>Ferragens Fixas (R$)</label>
-                    <input type="number" id="precoFerragem" value="150.00" onchange="calcularCustosGlobais()">
-                </div>
-                <div class="input-group">
-                    <label>Mão de Obra (R$)</label>
-                    <input type="number" id="precoMaoObra" value="500.00" onchange="calcularCustosGlobais()">
-                </div>
-                <div class="input-group">
-                    <label>Margem Lucro (%)</label>
-                    <input type="number" id="margemLucro" value="40" onchange="calcularCustosGlobais()">
+        <!-- Center: 3D Canvas -->
+        <section id="canvas-container">
+            <canvas id="cad-canvas"></canvas>
+            <div id="hud">
+                <div class="row"><span class="label">Modo:</span><span class="value" id="hud-mode">Oráculo Ativo</span></div>
+                <div class="row"><span class="label">Objetos:</span><span class="value" id="hud-objects">0</span></div>
+                <div class="row"><span class="label">Seleção:</span><span class="value" id="hud-selection">Nenhum</span></div>
+            </div>
+            
+            <!-- AR Overlay Elements -->
+            <div id="ar-overlay" class="hidden" style="position:absolute; inset:0; pointer-events:none; border: 2px dashed var(--accent);">
+                <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.7); color:white; padding:0.5rem 1rem; border-radius:4px;">
+                    Modo AR: Aponte para superfície plana
                 </div>
             </div>
-            <div class="price-summary">
-                <h4>Total M² Usado: <span id="totalM2">0.00</span> m²</h4>
-                <p id="totalProjectCost">R$ 0,00</p>
-            </div>
-        </div>
-    </div>
+        </section>
 
-    <!-- Modal: Configurações de APIs -->
-    <div id="modalSettings" class="modal-overlay">
+        <!-- Right Panel: AR & Costs -->
+        <aside class="panel">
+            <div class="panel-header">
+                <span>AR / Cam & Custos</span>
+            </div>
+            <div class="panel-content">
+                <!-- AR Controls -->
+                <div class="mb-2 font-bold text-sm">Realidade Aumentada (AR) e Câmera</div>
+                <div class="ar-status" id="ar-status">
+                    Status: Câmera inativa. Carregue foto ou ative AR.
+                </div>
+                
+                <div class="ar-controls">
+                    <button class="btn btn-secondary text-xs" onclick="App.ar.toggle()">📱 Projetar na Foto (AR)</button>
+                    <button class="btn btn-secondary text-xs" onclick="App.ar.reset()">🔄 Resetar Cam</button>
+                    <button class="btn btn-secondary text-xs" onclick="App.ar.adjustTilt()">📐 Inclinação Parede</button>
+                    <button class="btn btn-secondary text-xs" onclick="App.ar.autoFit()">🧲 Encaixe Auto</button>
+                </div>
+
+                <hr style="border:0; border-top:1px solid #e2e8f0; margin: 1rem 0;">
+
+                <!-- Costs -->
+                <div class="mb-2 font-bold text-sm">Custos e Orçamento (BOM)</div>
+                
+                <div class="cost-grid">
+                    <div class="input-group">
+                        <label>MDF/Material (R$/m²)</label>
+                        <input type="number" id="cost-mdf" value="85.00" step="0.01" onchange="App.bom.updateParams()">
+                    </div>
+                    <div class="input-group">
+                        <label>Mão de Obra (R$/m²)</label>
+                        <input type="number" id="cost-labor" value="80.00" step="0.01" onchange="App.bom.updateParams()">
+                    </div>
+                    <div class="input-group">
+                        <label>Ferragens (R$)</label>
+                        <input type="number" id="cost-hardware" value="0.00" step="0.01" onchange="App.bom.updateParams()">
+                    </div>
+                    <div class="input-group">
+                        <label>Outros/Frete (R$)</label>
+                        <input type="number" id="cost-others" value="0.00" step="0.01" onchange="App.bom.updateParams()">
+                    </div>
+                    <div class="input-group" style="grid-column: span 2;">
+                        <label>Margem de Lucro Desejada (%)</label>
+                        <input type="number" id="cost-margin" value="30" step="1" onchange="App.bom.updateParams()">
+                    </div>
+                </div>
+
+                <div class="bom-result">
+                    <div class="bom-label">Preço de Venda Sugerido:</div>
+                    <div class="bom-value" id="bom-price">R$ 0,00</div>
+                    <div class="bom-breakdown">
+                        <div>Custo Total: <span id="bom-cost">R$ 0,00</span></div>
+                        <div>Área MDF: <span id="bom-area">0.00 m²</span></div>
+                        <div>Ferragens: <span id="bom-hw">R$ 0,00</span></div>
+                        <div>Lucro: <span id="bom-profit">R$ 0,00</span></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- API Modal -->
+    <div class="modal" id="api-modal">
         <div class="modal-content">
-            <h2><i class="fas fa-key"></i> Chaves de API (Multi-Agente)</h2>
-            <p>Insira suas chaves para habilitar a visão computacional e o raciocínio avançado.</p>
-            <div class="input-group">
-                <label>Google Gemini API Key (Recomendado para Visão)</label>
-                <input type="password" id="keyGemini" placeholder="AIzaSy...">
+            <div class="modal-header">API Settings</div>
+            <div class="input-group mb-2">
+                <label>Gemini 2.5 Flash Key (Cérebro/Visão)</label>
+                <input type="password" id="api-gemini" placeholder="sk-...">
             </div>
-            <div class="input-group">
-                <label>OpenAI API Key (Opcional)</label>
-                <input type="password" id="keyOpenAI" placeholder="sk-...">
+            <div class="input-group mb-2">
+                <label>Groq API Key (Áudio Whisper)</label>
+                <input type="password" id="api-groq" placeholder="gsk_...">
             </div>
-            <div class="grid-2-col">
-                <button class="btn-block" onclick="toggleModal('modalSettings')">Cancelar</button>
-                <button class="btn-block success" onclick="salvarAPIs()">Salvar Chaves</button>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="App.ui.toggleModal('api-modal')">Cancelar</button>
+                <button class="btn btn-primary" onclick="App.api.saveKeys()">Salvar Chaves</button>
             </div>
         </div>
     </div>
 
-    <!-- Lógica Principal -->
+    <!-- Notifications -->
+    <div id="notifications"></div>
+
+    <!-- Application Logic -->
     <script src="app.js"></script>
 </body>
 </html>
