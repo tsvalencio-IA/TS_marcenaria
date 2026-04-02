@@ -1,697 +1,648 @@
-// GLOBALS GERAIS
-let pGlobal = { modulos: [], instalacao: "piso" };
-let moduloSendoEditado = null; 
-let base64Img = null, mimeImg = null;
-let modoARAtivo = false;
+/**
+ * ARQUITETURA BLINDADA - PARCEIRO DE PROGRAMAÇÃO
+ * Sistema: AutoCAD Marcenaria IA
+ * Princípios aplicados: 
+ * 1. Escopo Global Protegido.
+ * 2. Raycaster que ignora Edges e entende hierarquia (Parent traversal).
+ * 3. Pivôs Matemáticos Exatos (Portas rotacionam no canto, gavetas no eixo Z).
+ * 4. Prompt IA Agressivo: Força o retorno de uma lista (array) de múltiplos módulos.
+ */
 
-// GLOBALS THREE.JS
-let cena3D, camera3D, renderizador3D, controles3D;
-let motor3DIniciado = false;
-let raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
-let rootNode = null, grupoCozinha = null, boxHelper = null; 
-let objetosInterativos = [];
-
-// GLOBALS INTERAÇÃO
-let pressTimer;
-let startTouchX = 0, startTouchY = 0;
-let isEditingMode = false;
-let isDraggingAR = false, dragPrev = {x:0, y:0};
-
-window.onload = function() {
-    document.getElementById('keyGroq').value = localStorage.getItem('ak_grq_f2') || "";
-    document.getElementById('keyGemini').value = localStorage.getItem('ak_gem_f2') || "";
-    document.getElementById('keyOpenAI').value = localStorage.getItem('ak_oai_f2') || "";
-    
-    initMotor3D();
-    
-    // Gerar Módulo Inicial Seguro
-    pGlobal.modulos.push({
-        nome: "Armário Base", largura: 800, altura: 850, profundidade: 500, 
-        formato: "armario", prateleiras: 1, gavetas: 3, portas: 1, 
-        tipo_abertura: "giro", cor_caixa: "#EFEAE5", cor_portas: "#DDA15E"
-    });
-    gerarMovel3D();
+// ================= ESTADO GLOBAL =================
+const AppState = {
+    modulos: [],
+    modoAR: false,
+    chavesAPI: {
+        gemini: localStorage.getItem('ak_gemini_cad') || '',
+        openai: localStorage.getItem('ak_openai_cad') || ''
+    },
+    arrastando: null, // Referência para o objeto sendo movido no AR
+    animacoesAtivas: [] // Fila de portas/gavetas abrindo e fechando
 };
 
-function logIA(msg, author="sys") {
-    const b = document.getElementById('logBox'); 
-    if(b) { b.style.display = 'block'; b.innerHTML += `<div>> ${msg}</div>`; b.scrollTop = b.scrollHeight; }
-}
-function clearLog() { const b = document.getElementById('logBox'); if(b) { b.innerHTML = ""; b.style.display = "none"; } }
-function mostrarErro(msg) { const e = document.getElementById('errorDisplay'); if(e) { e.innerHTML = `<strong>Aviso:</strong> ${msg}`; e.style.display = 'block'; } }
+// ================= VARIÁVEIS THREE.JS =================
+let scene, camera, renderer, controls;
+let raycaster, pointer;
+let groundPlane; // Plano invisível para colisões de Drag/Drop AR
+let masterGroup; // Grupo raiz que segura toda a marcenaria
 
-function salvarChaves() {
-    localStorage.setItem('ak_grq_f2', document.getElementById('keyGroq')?.value.trim() || "");
-    localStorage.setItem('ak_gem_f2', document.getElementById('keyGemini')?.value.trim() || "");
-    localStorage.setItem('ak_oai_f2', document.getElementById('keyOpenAI')?.value.trim() || "");
-    const s = document.getElementById('statusChave'); 
-    if(s) { s.style.display='block'; setTimeout(()=>s.style.display='none', 3000); }
-}
+// Constantes de Interação
+const CLICK_TOLERANCE = 5; // Pixels para diferenciar click de drag
+let pointerDownPos = { x: 0, y: 0 };
+let isPointerDown = false;
 
-function processarFoto(e) {
-    const f = e.target.files[0]; if (!f) return;
-    mimeImg = f.type;
-    const r = new FileReader();
-    r.onload = ev => {
-        const i = new Image();
-        i.onload = () => {
-            const c = document.createElement('canvas');
-            let w = i.width, h = i.height;
-            if(w>800 || h>800) { const sf = Math.min(800/w, 800/h); w*=sf; h*=sf; }
-            c.width = w; c.height = h; c.getContext('2d').drawImage(i,0,0,w,h);
-            base64Img = c.toDataURL(mimeImg, 0.7);
-            const previewImg = document.getElementById('previewImg');
-            if(previewImg) { previewImg.src = base64Img; previewImg.style.display = 'block'; }
-            const btn = document.getElementById('btnAR'); if(btn) btn.style.display = 'inline-flex';
-        }
-        i.src = ev.target.result;
-    }
-    r.readAsDataURL(f);
-}
-
-document.getElementById('inpAudio')?.addEventListener('change', async function(e) {
-    const f = e.target.files[0]; if (!f) return;
-    const kG = document.getElementById('keyGroq')?.value.trim(); 
-    const kGem = document.getElementById('keyGemini')?.value.trim();
+// ================= INICIALIZAÇÃO =================
+window.addEventListener('DOMContentLoaded', () => {
+    initThreeJS();
+    carregarChaves();
     
-    const errD = document.getElementById('errorDisplay'); if(errD) errD.style.display='none';
-    const tf = document.getElementById('txtPedido'); if(tf) tf.value = "Transcrição em andamento...";
-    clearLog(); logIA("Iniciando conversão de áudio para texto...", "sys");
-
-    if (kG) {
-        try {
-            logIA("Tentando Groq Whisper...");
-            const fd = new FormData(); fd.append("file", f); fd.append("model", "whisper-large-v3-turbo");
-            const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", { method: 'POST', headers: { "Authorization": `Bearer ${kG}` }, body: fd });
-            if(res.ok) { const j = await res.json(); if(tf) tf.value = j.text; logIA("Sucesso (Groq)."); return; }
-        } catch(err) { logIA("Falha no Groq, fallback..."); }
-    }
-    if (kGem) {
-        try {
-            logIA("Tentando Gemini Flash...");
-            const r = new FileReader(); r.readAsDataURL(f);
-            r.onload = async () => {
-                const p = {contents:[{parts:[{text:"Transcreva esse áudio estritamente:"},{inlineData:{mimeType:f.type, data:r.result.split(',')[1]}}]}]};
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${kGem}`,{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p)});
-                if(res.ok) { const j = await res.json(); if(tf) tf.value = j.candidates[0].content.parts[0].text; logIA("Sucesso (Gemini)."); return; }
-            }; return;
-        } catch(err) { logIA("Falha no Gemini Audio.", "gemini"); }
-    }
-    if(tf) tf.value=""; mostrarErro("Nenhuma IA conseguiu transcrever o áudio.");
+    // Módulo inicial padrão para a tela não ficar vazia
+    AppState.modulos.push({
+        id: Date.now(),
+        nome: "Armário Base Cozinha",
+        largura: 800, // mm
+        altura: 850,
+        profundidade: 550,
+        portas: 2,
+        gavetas: 0,
+        cor: "#FFFFFF"
+    });
+    
+    reconstruirCena();
+    atualizarHUDLista();
+    calcularCustosGlobais();
 });
 
-function parseSeguro(txt) {
-    try {
-        let s = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
-        let ini = s.indexOf('{'); let fim = s.lastIndexOf('}');
-        if (ini !== -1 && fim !== -1) s = s.substring(ini, fim + 1);
-        return JSON.parse(s);
-    } catch(e) { throw new Error("A IA gerou a resposta fora do formato paramétrico válido."); }
+// ================= GERENCIAMENTO DE UI / HUD =================
+function toggleHUD(hudId) {
+    document.querySelectorAll('.bottom-sheet').forEach(sheet => {
+        if (sheet.id !== hudId) sheet.classList.remove('active');
+    });
+    const target = document.getElementById(hudId);
+    target.classList.toggle('active');
 }
 
-async function gerarProjetoIA() {
-    const txt = document.getElementById('txtPedido')?.value.trim();
-    const kGem = document.getElementById('keyGemini')?.value.trim();
-    const kGrq = document.getElementById('keyGroq')?.value.trim();
-    const kOai = document.getElementById('keyOpenAI')?.value.trim();
+function toggleModal(modalId) {
+    const modal = document.getElementById(modalId);
+    modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+}
+
+function carregarChaves() {
+    document.getElementById('keyGemini').value = AppState.chavesAPI.gemini;
+    document.getElementById('keyOpenAI').value = AppState.chavesAPI.openai;
+}
+
+function salvarAPIs() {
+    AppState.chavesAPI.gemini = document.getElementById('keyGemini').value.trim();
+    AppState.chavesAPI.openai = document.getElementById('keyOpenAI').value.trim();
+    localStorage.setItem('ak_gemini_cad', AppState.chavesAPI.gemini);
+    localStorage.setItem('ak_openai_cad', AppState.chavesAPI.openai);
+    toggleModal('modalSettings');
+    alert("Chaves salvas com sucesso no navegador.");
+}
+
+function showLoading(msg) {
+    document.getElementById('statusText').innerText = msg;
+    document.getElementById('statusOverlay').style.display = 'flex';
+}
+function hideLoading() {
+    document.getElementById('statusOverlay').style.display = 'none';
+}
+
+// ================= MOTOR THREE.JS - CORE =================
+function initThreeJS() {
+    const container = document.getElementById('canvas-container');
     
-    const errD = document.getElementById('errorDisplay'); if(errD) errD.style.display = 'none';
-    if (!txt && !base64Img) return mostrarErro("Preciso de diretrizes ou de uma foto para projetar.");
-    if (!kGem && !kGrq && !kOai) return mostrarErro("Configure pelo menos uma chave de IA.");
+    scene = new THREE.Scene();
+    
+    // Iluminação Profissional (Estilo Studio)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+    
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
 
-    const btn = document.getElementById('btnProjetar');
-    if(btn) { btn.innerHTML = '<i class="fas fa-cog fa-spin"></i> Desenhando Geometria...'; btn.disabled = true; }
-    clearLog();
+    const dirLight2 = new THREE.DirectionalLight(0xfff5e6, 0.4); // Luz quente de preenchimento
+    dirLight2.position.set(-10, 10, -10);
+    scene.add(dirLight2);
 
-    let visaoContext = "";
+    // Câmera
+    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(0, 1.5, 3.5);
 
-    if (base64Img && kGem) {
-        try {
-            logIA("Analisando imagem com Gemini Vision...");
-            const pl = {contents:[{parts:[{text:"Aja como um Marceneiro de Produção Mestre. Analise a imagem fornecida minuciosamente. O utilizador quer copiar ou substituir esta exata composição. Liste TODOS os módulos de armário / gaveteiros presentes na foto, da esquerda para a direita. Indique a quantidade de portas, gavetas e descreva a cor predominante. Não resuma. Descreva tudo detalhadamente em formato de lista estruturada."}, {inlineData:{mimeType:mimeImg, data:base64Img.split(',')[1]}}]}]};
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${kGem}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(pl) });
-            if(res.ok) { const d = await res.json(); visaoContext = d.candidates[0].content.parts[0].text; logIA("Laudo fotográfico gerado com precisão."); }
-        } catch(e) { logIA("Falha na visão Gemini."); }
-    }
+    // Renderizador
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
 
-    const promptMestre = `Você é o Cérebro Lógico do AutoCAD de Marcenaria.
-DIRETRIZ MÁXIMA: Se o cliente pedir para "substituir", "copiar" ou fizer referência à foto, VOCÊ DEVE CRIAR UM ARRAY DE MÓDULOS CONTENDO TODAS AS PEÇAS DESCRITAS NO LAUDO FOTOGRÁFICO. Reproduza a cozinha inteira (Crie múltiplos objetos JSON dentro do array 'modulos'). Se ditar uma cor (ex: "azul"), aplique o código HEX dessa cor em TODOS os módulos nas propriedades 'cor_caixa' e 'cor_portas'.
+    // Controles (Orbit)
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 0.5, 0);
 
-Pedido do Cliente: "${txt}"
-Laudo Fotográfico da Cena: "${visaoContext || "Nenhuma foto anexada."}"
+    // Grid e Plano de Chão (AR Ground)
+    const gridHelper = new THREE.GridHelper(10, 20, 0x000000, 0xcccccc);
+    gridHelper.position.y = 0;
+    scene.add(gridHelper);
 
-FORMATO ESTRITO (Retorne APENAS um JSON válido):
-{
-  "nome_projeto": "Nome",
-  "engenharia": "Dividi a cozinha solicitada em módulos para fabricação...",
-  "instalacao": "piso",
-  "modulos": [
-    {
-      "nome": "Modulo Exemplo",
-      "formato": "armario", 
-      "largura": 600,
-      "altura": 800,
-      "profundidade": 500,
-      "gavetas": 3,
-      "portas": 0,
-      "prateleiras": 0,
-      "tipo_abertura": "nenhuma",
-      "cor_caixa": "#ECF0F1",
-      "cor_portas": "#1E90FF"
-    }
-  ]
-}`;
+    const groundGeo = new THREE.PlaneGeometry(100, 100);
+    const groundMat = new THREE.MeshBasicMaterial({ visible: false }); // Plano invisível matemático
+    groundPlane = new THREE.Mesh(groundGeo, groundMat);
+    groundPlane.rotation.x = -Math.PI / 2;
+    scene.add(groundPlane);
 
-    let jsonR = null;
+    // Grupo Mestre que segurará todos os móveis
+    masterGroup = new THREE.Group();
+    scene.add(masterGroup);
 
-    if (kOai && !jsonR) {
-        try {
-            logIA("Enviando para OpenAI (Cérebro Lógico)...");
-            const res = await fetch("https://api.openai.com/v1/chat/completions", { method: 'POST', headers: { "Authorization": `Bearer ${kOai}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "gpt-4o-mini", messages: [{role: "user", content: promptMestre}], temperature: 0.1, response_format: {type:"json_object"} }) });
-            if(res.ok) { const d = await res.json(); jsonR = safeParse(d.choices[0].message.content); logIA("OpenAI concluiu mapeamento."); }
-        } catch(e) { logIA("OpenAI falhou."); }
-    }
-    if (kGrq && !jsonR) {
-        try {
-            logIA("Enviando para Groq Llama...");
-            const res = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: 'POST', headers: { "Authorization": `Bearer ${kGrq}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{role: "user", content: promptMestre}], temperature: 0.1, response_format: {type:"json_object"} }) });
-            if(res.ok) { const d = await res.json(); jsonR = safeParse(d.choices[0].message.content); logIA("Groq concluiu mapeamento."); }
-        } catch(e) { logIA("Groq falhou."); }
-    }
-    if (kGem && !jsonR) {
-        try {
-            logIA("Enviando para Gemini Lógico...");
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${kGem}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({contents: [{parts: [{text: promptMestre}]}], generationConfig: {temperature: 0.1, responseMimeType: "application/json"}}) });
-            if(res.ok) { const d = await res.json(); jsonR = safeParse(d.candidates[0].content.parts[0].text); logIA("Gemini concluiu mapeamento."); }
-        } catch(e) { logIA("Gemini falhou."); }
-    }
+    // Configuração do Raycaster
+    raycaster = new THREE.Raycaster();
+    pointer = new THREE.Vector2();
 
-    if(btn) { btn.innerHTML = '<i class="fas fa-cogs"></i> Projetar Móvel Paramétrico'; btn.disabled = false; }
+    // Eventos de interação unificados (Mouse e Touch)
+    renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
+    renderer.domElement.addEventListener('pointermove', onPointerMove, false);
+    renderer.domElement.addEventListener('pointerup', onPointerUp, false);
+    window.addEventListener('resize', onWindowResize, false);
 
-    if(!jsonR) return mostrarErro("As IAs falharam. Verifique conectividade/chaves.");
-
-    dadosProjeto.modulos = jsonR.modulos || [];
-    dadosProjeto.instalacao = jsonR.instalacao || "piso";
-
-    const secCAD = document.getElementById('secCAD'); if(secCAD) secCAD.style.display = 'block';
-    const dIns = document.getElementById('designerInsight'); if(dIns) dIns.style.display = 'block';
-    const tDes = document.getElementById('textoDesigner'); if(tDes) tDes.innerText = jsonR.engenharia || "Geometria renderizada.";
-    const itN = document.getElementById('itemName'); if(itN) itN.value = jsonR.nome_projeto || "Móvel Customizado";
-
-    fecharHUDs(); 
-    gerarMovel3D(); 
-    if(modoARAtivo) toggleAR(); 
+    // Inicia o Loop
+    animate();
 }
 
-function initMotor3D() {
-    const w = document.getElementById('container3DWrapper');
-    if (!w) return;
-    cena3D = new THREE.Scene(); cena3D.background = null;
+function onWindowResize() {
+    const container = document.getElementById('canvas-container');
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+}
 
-    cena3D.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dl = new THREE.DirectionalLight(0xffffff, 0.6); dl.position.set(3, 6, 5); cena3D.add(dl);
-    const dl2 = new THREE.DirectionalLight(0xDDA15E, 0.3); dl2.position.set(-3, -2, -3); cena3D.add(dl2);
+// ================= SISTEMA DE INTERAÇÃO BLINDADO (RAYCASTER) =================
+function onPointerDown(event) {
+    isPointerDown = true;
+    pointerDownPos.x = event.clientX;
+    pointerDownPos.y = event.clientY;
+    
+    updatePointer(event);
+    raycaster.setFromCamera(pointer, camera);
 
-    camera3D = new THREE.PerspectiveCamera(45, w.clientWidth / w.clientHeight, 0.1, 1000);
-    renderizador3D = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderizador3D.setClearColor( 0x000000, 0 ); 
-    renderizador3D.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderizador3D.setSize(w.clientWidth, w.clientHeight);
-    const v3d = document.getElementById('visualizador3D');
-    if (v3d) v3d.appendChild(renderizador3D.domElement);
-
-    controles3D = new THREE.OrbitControls(camera3D, renderizador3D.domElement);
-    controles3D.enableDamping = true; controles3D.dampingFactor = 0.05;
-
-    rootNode = new THREE.Group(); cena3D.add(rootNode);
-
-    renderizador3D.domElement.addEventListener('pointerdown', e => {
-        startTouchX = e.clientX; startTouchY = e.clientY;
-        
-        const chkDrag = document.getElementById('chkDrag');
-        if (modoARAtivo && chkDrag && chkDrag.checked) {
-            isDraggingAR = true; controles3D.enabled = false; dragPrev = {x: e.clientX, y: e.clientY}; return;
-        }
-
-        const hit = buscarIntersecao(e);
-        if (hit && !isEditingMode) {
-            pressTimer = setTimeout(() => ativarEdicaoModulo(hit.idx), 450);
-        }
-    });
-
-    renderizador3D.domElement.addEventListener('pointermove', e => {
-        if (isDraggingAR && rootNode) {
-            const dx = e.clientX - dragPrev.x; const dy = e.clientY - dragPrev.y;
-            rootNode.position.x += dx * 0.01; rootNode.position.y -= dy * 0.01;
-            const cx = document.getElementById('camPosX'); if (cx) cx.value = rootNode.position.x;
-            const cy = document.getElementById('camPosY'); if (cy) cy.value = rootNode.position.y;
-            dragPrev = {x: e.clientX, y: e.clientY}; return;
-        }
-        if (Math.abs(e.clientX - startTouchX) > 5 || Math.abs(e.clientY - startTouchY) > 5) clearTimeout(pressTimer);
-    });
-
-    renderizador3D.domElement.addEventListener('pointerup', e => {
-        clearTimeout(pressTimer);
-        if (isDraggingAR) { isDraggingAR = false; if(!isEditingMode) controles3D.enabled = true; return; }
-        
-        if (Math.abs(e.clientX - startTouchX) < 5 && Math.abs(e.clientY - startTouchY) < 5 && !isEditingMode) {
-            const hit = buscarIntersecao(e);
-            if (hit && hit.animavel) {
-                hit.animavel.userData.aberto = !hit.animavel.userData.aberto;
+    if (AppState.modoAR) {
+        controls.enabled = false; // Desativa giro de câmera para permitir arrastar
+        // Tenta pegar o móvel inteiro para arrastar
+        const intersects = raycaster.intersectObjects(masterGroup.children, true);
+        if (intersects.length > 0) {
+            // Sobe até achar o módulo principal
+            let obj = intersects[0].object;
+            while (obj && !obj.userData.isRootModule && obj.parent) {
+                obj = obj.parent;
+            }
+            if (obj && obj.userData.isRootModule) {
+                AppState.arrastando = obj;
             }
         }
-    });
-
-    renderizador3D.domElement.addEventListener('wheel', e => {
-        if (modoARAtivo && rootNode) {
-            e.preventDefault();
-            const ns = rootNode.scale.x * (e.deltaY > 0 ? 0.95 : 1.05);
-            if(ns >= 0.1 && ns <= 4) {
-                rootNode.scale.set(ns, ns, ns);
-                const sc = document.getElementById('camScale'); if(sc) sc.value = ns;
-            }
-        }
-    }, { passive: false });
-
-    function loopGrafico() {
-        requestAnimationFrame(loopGrafico);
-        
-        if (grupoCozinha) {
-            grupoCozinha.traverse(obj => {
-                const d = obj.userData;
-                if (!d || !d.animavel) return;
-                if(d.tipo === 'giro') obj.rotation.y += ((d.aberto ? d.rotAbre : 0) - obj.rotation.y) * 0.15;
-                if(d.tipo === 'basculante') obj.rotation.x += ((d.aberto ? d.rotAbre : 0) - obj.rotation.x) * 0.15;
-                if(d.tipo === 'gaveta') obj.position.z += ((d.aberto ? d.zOpen : d.zOrig) - obj.position.z) * 0.15;
-            });
-        }
-        
-        if (window.boxHelper) window.boxHelper.update();
-        controles3D.update(); renderizador3D.render(cena3D, camera3D);
     }
-    loopGrafico(); 
-    
-    window.addEventListener('resize', () => { 
-        const wr = document.getElementById('container3DWrapper');
-        if (wr && camera3D && renderizador3D) {
-            camera3D.aspect = wr.clientWidth/wr.clientHeight; 
-            camera3D.updateProjectionMatrix(); 
-            renderizador3D.setSize(wr.clientWidth, wr.clientHeight); 
-        }
-    });
 }
 
-function buscarIntersecao(e) {
-    const r = renderizador3D.domElement.getBoundingClientRect();
-    mouse.x = ((e.clientX - r.left)/r.width)*2-1; 
-    mouse.y = -((e.clientY - r.top)/r.height)*2+1;
-    raycaster.setFromCamera(mouse, camera3D);
+function onPointerMove(event) {
+    if (!isPointerDown) return;
     
-    if(!grupoCozinha || grupoCozinha.children.length === 0) return null;
-    
-    const ints = raycaster.intersectObjects(grupoCozinha.children, true); 
-    if (ints.length > 0) {
-        let curr = ints[0].object;
-        let objAnimavel = null; let objModulo = null; let mIdx = null;
+    // Lógica de Arrasto AR
+    if (AppState.modoAR && AppState.arrastando) {
+        updatePointer(event);
+        raycaster.setFromCamera(pointer, camera);
         
-        while(curr && curr !== cena3D) {
-            if (curr.userData) {
-                if (curr.userData.animavel) objAnimavel = curr;
-                if (curr.userData.isMod) { objModulo = curr; mIdx = curr.userData.idx; }
-            }
-            curr = curr.parent;
+        // Colide com o plano de chão invisível
+        const intersects = raycaster.intersectObject(groundPlane);
+        if (intersects.length > 0) {
+            const hit = intersects[0].point;
+            // Move o módulo nos eixos X e Z
+            AppState.arrastando.position.x = hit.x;
+            AppState.arrastando.position.z = hit.z;
         }
-        if (objModulo) return { obj: objModulo, idx: mIdx, animavel: objAnimavel };
-    } 
-    return null;
+    }
 }
 
-function HexSafe(hex, def) { 
-    if(!hex) return new THREE.Color(def);
-    const m = {"azul":"#1E90FF", "vermelho":"#E74C3C", "verde":"#2ECC71", "amarelo":"#F1C40F", "branco":"#FFFFFF", "preto":"#111111", "madeira":"#D35400", "cinza":"#95A5A6"};
-    let hc = m[hex.toLowerCase().trim()] || hex;
-    try { return new THREE.Color(hc); } catch(e) { return new THREE.Color(def); } 
-}
-
-function gerarMovel3D() {
-    if (grupoCozinha) rootNode.remove(grupoCozinha);
-    if (window.boxHelper) { cena3D.remove(window.boxHelper); window.boxHelper = null; }
+function onPointerUp(event) {
+    isPointerDown = false;
+    controls.enabled = true; // Reativa controle de câmera
     
-    grupoCozinha = new THREE.Group(); 
-    rootNode.add(grupoCozinha);
-
-    const E = 0.018; const F = 0.003; 
-
-    let LTotal = 0, HMax = 0;
-    dadosProjeto.modulos.forEach(m => { 
-        m.largura = Number(m.largura)||800; m.altura = Number(m.altura)||800; m.profundidade = Number(m.profundidade)||500;
-        m.gavetas = Number(m.gavetas)||0; m.portas = Number(m.portas)||0; m.prateleiras = Number(m.prateleiras)||0;
-        LTotal += m.largura; if(m.altura > HMax) HMax = m.altura; 
-    });
-
-    const TW = LTotal / 1000, TH = HMax / 1000;
-    grupoCozinha.position.y = (dadosProjeto.instalacao === "piso") ? 0 : 1.2;
-    let cursorX = -TW / 2; 
-
-    function criarChapa(w, h, d, mat, x, y, z, pGrp) {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-        const lMat = new THREE.LineBasicMaterial({color:0x000000, opacity:0.15, transparent:true});
-        mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), lMat));
-        mesh.position.set(x, y, z); pGrp.add(mesh);
-        return mesh;
+    // Verifica se foi um clique limpo (não um arrasto)
+    const dx = Math.abs(event.clientX - pointerDownPos.x);
+    const dy = Math.abs(event.clientY - pointerDownPos.y);
+    
+    if (AppState.arrastando) {
+        AppState.arrastando = null;
+        return; // Era um arrasto, ignora o clique
     }
 
-    dadosProjeto.modulos.forEach((mod, idx) => {
-        const W = mod.largura/1000, H = mod.altura/1000, D = mod.profundidade/1000;
-        const mG = new THREE.Group(); 
-        mG.position.set(cursorX + W/2, 0, 0); 
-        mG.userData = { isMod: true, idx: idx }; 
+    if (dx < CLICK_TOLERANCE && dy < CLICK_TOLERANCE && !AppState.modoAR) {
+        // Foi um CLIQUE - Dispara a Física
+        updatePointer(event);
+        raycaster.setFromCamera(pointer, camera);
         
-        const fmt = mod.formato || 'armario';
-        const matCX = new THREE.MeshStandardMaterial({ color: HexSafe(mod.cor_caixa, "#ECF0F1"), roughness: 0.9 });
-        const matPT = new THREE.MeshStandardMaterial({ color: HexSafe(mod.cor_portas, "#DDA15E"), roughness: 0.5 });
-
-        if (fmt === 'armario' || fmt === 'reto' || fmt === 'estante') {
-            criarChapa(W, E, D, matCX, 0, E/2, D/2, mG); 
-            criarChapa(W, E, D, matCX, 0, H-E/2, D/2, mG); 
-            criarChapa(E, H, D, matCX, -W/2+E/2, H/2, D/2, mG); 
-            criarChapa(E, H, D, matCX, W/2-E/2, H/2, D/2, mG); 
-            criarChapa(W-E*2, H-E*2, 0.006, matCX, 0, H/2, 0.01, mG); 
+        // Importante: intercepta apenas objetos que suportam raycast (Edges ignoram isso graças ao hack abaixo)
+        const intersects = raycaster.intersectObjects(masterGroup.children, true);
+        
+        if (intersects.length > 0) {
+            let hitObj = intersects[0].object;
             
-            const hInt = H - E*2;
-            let hPor = hInt, gavY = E;
-
-            if(mod.gavetas > 0) {
-                const hAreaGav = mod.portas > 0 ? hInt * 0.4 : hInt; 
-                hPor = hInt - hAreaGav; 
-                gavY = E + hPor; 
-                const gH = hAreaGav / mod.gavetas;
-                for(let i=0; i<mod.gavetas; i++) {
-                    const bGav = new THREE.Group(); 
-                    bGav.position.set(0, gavY + (i*gH) + gH/2, D/2); 
-                    criarChapa(W-E*2-F*2, gH-F, E, matPT, 0, 0, E/2, bGav); 
-                    criarChapa(W-E*4, gH-E*2, D-E, matCX, 0, 0, -(D-E)/2 + E, bGav); 
-                    bGav.userData = { animavel: true, tipo: 'gaveta', aberto: false, zOrig: D/2, zOpen: D/2 + D*0.8 };
-                    mG.add(bGav); 
+            // Traverse up para achar o componente animável (porta ou gaveta)
+            let animatable = null;
+            let curr = hitObj;
+            while(curr && curr.parent) {
+                if(curr.userData.isAnimatable) {
+                    animatable = curr;
+                    break;
                 }
+                curr = curr.parent;
             }
 
-            if (mod.prateleiras > 0 && hPor > 0.1) {
-                const esp = hPor / (mod.prateleiras + 1);
-                for(let i=1; i<=mod.prateleiras; i++) criarChapa(W - E*2, E, D - E - 0.01, matCX, 0, E + (esp * i), D/2 - 0.005, mG);
-            }
-
-            if (mod.portas > 0 && mod.tipo_abertura !== 'nenhuma' && hPor > 0.1) {
-                if (mod.tipo_abertura === "basculante") {
-                    const pHi = hPor / mod.portas;
-                    for(let i=0; i<mod.portas; i++) {
-                        const bGr = new THREE.Group(); 
-                        bGr.position.set(0, E + (i*pHi) + pHi, D+E/2); 
-                        criarChapa(W-E*2-F*2, pHi-F, E, matPT, 0, -pHi/2, 0, bGr);
-                        bGr.userData = { animavel: true, tipo: 'basculante', aberto: false, rotAbre: -Math.PI/2.2 };
-                        mG.add(bGr); 
-                    }
-                } else {
-                    const wI = (W - E*2 - (F * (mod.portas+1))) / mod.portas;
-                    const startX = -W/2 + E + F;
-                    for(let i=0; i<mod.portas; i++) {
-                        const isLeftHinge = i < (mod.portas/2);
-                        const pivotX = isLeftHinge ? (startX + i * (wI + F)) : (startX + i * (wI + F) + wI);
-                        const bGr = new THREE.Group(); 
-                        bGr.position.set(pivotX, E + hPor/2, D+E/2); 
-                        const meshOffsetX = isLeftHinge ? wI/2 : -wI/2;
-                        criarChapa(wI, hPor-F, E, matPT, meshOffsetX, 0, 0, bGr);
-                        bGr.userData = { animavel: true, tipo: 'giro', aberto: false, rotAbre: isLeftHinge ? -Math.PI/1.8 : Math.PI/1.8 };
-                        mG.add(bGr); 
-                    }
-                }
+            if (animatable) {
+                animatable.userData.isOpen = !animatable.userData.isOpen;
+                
+                // Remove se já estava animando para evitar conflitos
+                AppState.animacoesAtivas = AppState.animacoesAtivas.filter(a => a.obj !== animatable);
+                
+                // Adiciona à fila de animação
+                AppState.animacoesAtivas.push({
+                    obj: animatable,
+                    type: animatable.userData.type, // 'door' ou 'drawer'
+                    target: animatable.userData.isOpen,
+                    progress: 0
+                });
             }
         }
-        else if (fmt === 'painel_tv') {
-            criarChapa(W, H, E, matPT, 0, H/2, E/2, mG);
-            criarChapa(W, H/4, D, matCX, 0, (H/4)/2, E + D/2, mG);
-        }
-        else if (fmt === 'l_canto') {
-            criarChapa(W, E, D, matCX, 0, E/2, D/2, mG); 
-            criarChapa(W, E, D, matCX, 0, H-E/2, D/2, mG);
-            criarChapa(E, H, D, matCX, -W/2+E/2, H/2, D/2, mG); 
-            criarChapa(W-E*2, H, 0.006, matCX, 0, H/2, 0.01, mG);
-            criarChapa(D, E, W-D, matCX, W/2-D/2, E/2, D + (W-D)/2, mG);
-            criarChapa(D, E, W-D, matCX, W/2-D/2, H-E/2, D + (W-D)/2, mG);
-            criarChapa(D, H, E, matCX, W/2-D/2, H/2, W-E/2, mG);
-            criarChapa(E, H, W-D, matCX, W/2-D+E/2, H/2, D + (W-D)/2, mG);
-        }
-        
-        moveisGroup.add(mG); 
-        cursorX += W; 
-    });
-
-    calcularMateriaisECustos();
-
-    if(!isEditingMode && !modoARAtivo && camera3D && controles3D) {
-        const ty = dadosProjeto.instalacao === "piso" ? TH/2 : 1.5 + TH/2;
-        camera3D.position.set(0, ty + 0.5, Math.max(TW, TH)*1.8);
-        controles3D.target.set(0, ty, 0); 
-        controles3D.update();
     }
 }
 
-function calcularMateriaisECustos() {
-    const tb = document.getElementById('tabelaBOM'); if (!tb) return;
-    tb.innerHTML = '';
-    
-    let vMdf = 0, vFer = 0;
-    
-    const pMCx = parseFloat(document.getElementById('vMdfC')?.value)||0;
-    const pMPt = parseFloat(document.getElementById('vMdfP')?.value)||0;
-    const pFnd = parseFloat(document.getElementById('vFnd')?.value)||0;
-    const pFit = parseFloat(document.getElementById('vFita')?.value)||0;
-    const pDob = parseFloat(document.getElementById('vDob')?.value)||0;
-    const pCor = parseFloat(document.getElementById('vCor')?.value)||0;
-    const pPux = parseFloat(document.getElementById('vPux')?.value)||0;
-    const pPar = parseFloat(document.getElementById('vPar')?.value)||0;
-    const pMO  = parseFloat(document.getElementById('vFix')?.value)||0;
-    const pLuc = parseFloat(document.getElementById('vLucro')?.value)||0;
-    
-    const E = 18; 
+function updatePointer(event) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+}
 
-    dadosProjeto.modulos.forEach((m, i) => {
-        const W = Number(m.largura)||800, H = Number(m.altura)||800, D = Number(m.profundidade)||500;
-        const p = Number(m.prateleiras)||0, g = Number(m.gavetas)||0, pt = Number(m.portas)||0;
-        const fm = m.formato || 'armario';
-
-        tb.innerHTML += `<tr class="row-header"><td colspan="5"><i class="fas fa-box-open"></i> [M${i+1}] ${m.nome||'Módulo'} (${fm})</td></tr>`;
-
-        if (fm === 'armario' || fm === 'reto' || fm === 'estante') {
-            const aB = (W*D*2)/1e6; const cB = aB*pMCx; vMdf+=cB;
-            tb.innerHTML += `<tr><td>Bases Sup/Inf (MDF Caixa)</td><td>2</td><td>${W} x ${D}</td><td>${aB.toFixed(2)} m²</td><td>R$ ${cB.toFixed(2)}</td></tr>`;
+// ================= LOOP DE ANIMAÇÃO =================
+function animate() {
+    requestAnimationFrame(animate);
+    
+    // Processa a fila de física (Abertura suave)
+    const speed = 0.1;
+    for (let i = AppState.animacoesAtivas.length - 1; i >= 0; i--) {
+        const anim = AppState.animacoesAtivas[i];
+        const obj = anim.obj;
+        
+        if (anim.type === 'door') {
+            // Rotação da Porta
+            // Se for dobradiça esquerda, gira para fora (+). Se direita, para dentro (-).
+            const angleOpen = obj.userData.hinge === 'left' ? Math.PI / 2 : -Math.PI / 2;
+            const targetRot = anim.target ? angleOpen : 0;
             
-            const aL = (H*D*2)/1e6; const cL = aL*pMCx; vMdf+=cL;
-            tb.innerHTML += `<tr><td>Laterais (MDF Caixa)</td><td>2</td><td>${H} x ${D}</td><td>${aL.toFixed(2)} m²</td><td>R$ ${cL.toFixed(2)}</td></tr>`;
-
-            if(p > 0) {
-                const aP = ((W-E*2)*(D-E-10)*p)/1e6; const cP = aP*pMCx; vMdf+=cP;
-                tb.innerHTML += `<tr><td>Prateleiras Internas</td><td>${p}</td><td>${W-E*2} x ${D-E-10}</td><td>${aP.toFixed(2)} m²</td><td>R$ ${cP.toFixed(2)}</td></tr>`;
-            }
+            obj.rotation.y += (targetRot - obj.rotation.y) * speed;
             
-            let aF = ((W-E*2)*(H-E*2))/1e6; const cF = aF*pFnd; vMdf+=cF;
-            tb.innerHTML += `<tr><td>Fundo Traseiro 6mm</td><td>1</td><td>${W-E*2} x ${H-E*2}</td><td>${aF.toFixed(2)} m²</td><td>R$ ${cF.toFixed(2)}</td></tr>`;
-
-            const mFi = ((W*2)+(H*2))/1000; const cFi = mFi*pFit; vMdf+=cFi;
-            tb.innerHTML += `<tr><td>Fita de Borda Frontal</td><td>-</td><td>Perímetro</td><td>${mFi.toFixed(1)} m</td><td>R$ ${cFi.toFixed(2)}</td></tr>`;
-
-            const aT = ((W*H)/1e6); const cPar = aT * pPar; vFer+=cPar;
-            tb.innerHTML += `<tr><td>Kit de Parafusos/Fixação</td><td>-</td><td>-</td><td>${aT.toFixed(2)} m²</td><td>R$ ${cPar.toFixed(2)}</td></tr>`;
-
-            if(g > 0) {
-                const hG = Math.round((pt>0 ? (H-E*2)*0.4 : H-E*2)/g);
-                const aG = (W*hG*g)/1e6; const cG = aG*pMPt; vMdf+=cG;
-                const cCT = g*pCor; vFer+=cCT;
-                const cPx = g*pPux; vFer+=cPx;
-                tb.innerHTML += `<tr><td>Frentes Gaveta (MDF Porta)</td><td>${g}</td><td>${W} x ${hG}</td><td>${aG.toFixed(2)} m²</td><td>R$ ${cG.toFixed(2)}</td></tr>`;
-                tb.innerHTML += `<tr><td>Corrediças Telescópicas</td><td>${g} Pr</td><td>-</td><td>-</td><td>R$ ${cCT.toFixed(2)}</td></tr>`;
-                tb.innerHTML += `<tr><td>Puxadores (Gavetas)</td><td>${g} un</td><td>-</td><td>-</td><td>R$ ${cPx.toFixed(2)}</td></tr>`;
-            }
-
-            if(pt > 0 && m.tipo_abertura !== 'nenhuma') {
-                const wp = W/pt; const hp = Math.round(g>0 ? (H-E*2)*0.6 : H-E*2);
-                const aPo = (wp*hp*pt)/1e6; const cPo = aPo*pMPt; vMdf+=cPo;
-                const ndob = pt*2; const cDob = ndob*pDob; vFer+=cDob;
-                const cPx = pt*pPux; vFer+=cPx;
-                tb.innerHTML += `<tr><td>Portas (${m.tipo_abertura})</td><td>${pt}</td><td>${Math.round(wp)} x ${hp}</td><td>${aPo.toFixed(2)} m²</td><td>R$ ${cPo.toFixed(2)}</td></tr>`;
-                tb.innerHTML += `<tr><td>Dobradiças/Pistões</td><td>${ndob} un</td><td>-</td><td>-</td><td>R$ ${cDob.toFixed(2)}</td></tr>`;
-                tb.innerHTML += `<tr><td>Puxadores (Portas)</td><td>${pt} un</td><td>-</td><td>-</td><td>R$ ${cPx.toFixed(2)}</td></tr>`;
+            // Condição de parada (aproximação)
+            if (Math.abs(obj.rotation.y - targetRot) < 0.01) {
+                obj.rotation.y = targetRot;
+                AppState.animacoesAtivas.splice(i, 1);
             }
         } 
-        else if (fm === 'l_canto') {
-            const aCa = ((W*D*4)+(H*D*2))/1e6; const cCa = aCa*pMCx; vMdf+=cCa;
-            tb.innerHTML += `<tr><td>Chapas Canto L (Conjunto)</td><td>-</td><td>Várias</td><td>${aCa.toFixed(2)} m²</td><td>R$ ${cCa.toFixed(2)}</td></tr>`;
+        else if (anim.type === 'drawer') {
+            // Deslizamento da Gaveta (Eixo Z)
+            const depth = obj.userData.depth;
+            const targetZ = anim.target ? depth * 0.8 : 0; // Abre 80% do trilho
+            
+            obj.position.z += (targetZ - obj.position.z) * speed;
+            
+            if (Math.abs(obj.position.z - targetZ) < 0.001) {
+                obj.position.z = targetZ;
+                AppState.animacoesAtivas.splice(i, 1);
+            }
         }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+
+// ================= CONSTRUTOR DE GEOMETRIA (CORE MATH) =================
+function reconstruirCena() {
+    // Limpa cena anterior
+    while(masterGroup.children.length > 0) {
+        masterGroup.remove(masterGroup.children[0]);
+    }
+
+    let offsetX = 0; // Posição lateral acumulada para alinhar módulos lado a lado
+
+    AppState.modulos.forEach(mod => {
+        // Conversão de mm para metros (Three.js scale)
+        const w = mod.largura / 1000;
+        const h = mod.altura / 1000;
+        const d = mod.profundidade / 1000;
+        const thickness = 0.015; // 15mm MDF
+
+        const color = mod.cor || "#FFFFFF";
+        
+        // Grupo do Módulo Completo
+        const modGroup = new THREE.Group();
+        modGroup.userData = { isRootModule: true, rawData: mod };
+        
+        const matBase = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+        const matEdge = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 2 });
+
+        // Função auxiliar para criar caixas com linhas (HACK: edges não disparam raycast)
+        const createPart = (geo, posX, posY, posZ) => {
+            const mesh = new THREE.Mesh(geo, matBase);
+            mesh.position.set(posX, posY, posZ);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            const edges = new THREE.EdgesGeometry(geo);
+            const line = new THREE.LineSegments(edges, matEdge);
+            // CORREÇÃO CRÍTICA DO ERRO ANTERIOR:
+            line.raycast = () => {}; // Desativa raycast nas linhas!
+            mesh.add(line);
+            
+            return mesh;
+        };
+
+        // 1. Caixaria (Estrutura)
+        const baseGeo = new THREE.BoxGeometry(w, thickness, d);
+        const latGeo = new THREE.BoxGeometry(thickness, h, d);
+        const fundoGeo = new THREE.BoxGeometry(w, h, thickness);
+
+        modGroup.add(createPart(baseGeo, 0, thickness/2, 0)); // Base
+        modGroup.add(createPart(baseGeo, 0, h - thickness/2, 0)); // Tampo
+        modGroup.add(createPart(latGeo, -w/2 + thickness/2, h/2, 0)); // Lat Esquerda
+        modGroup.add(createPart(latGeo, w/2 - thickness/2, h/2, 0)); // Lat Direita
+        modGroup.add(createPart(fundoGeo, 0, h/2, -d/2 + thickness/2)); // Fundo
+
+        // 2. Gavetas Matemáticas
+        if (mod.gavetas > 0) {
+            const gavH = (h - (thickness * 2)) / mod.gavetas; // Espaço dividido
+            const gavW = w - (thickness * 2);
+            
+            for (let i = 0; i < mod.gavetas; i++) {
+                const gavGroup = new THREE.Group();
+                // userData essencial para o Raycaster reconhecer a ação
+                gavGroup.userData = { isAnimatable: true, type: 'drawer', isOpen: false, depth: d };
+                
+                // Posição base Y da gaveta específica
+                const posY = thickness + (gavH * i) + (gavH / 2);
+                gavGroup.position.set(0, posY, 0);
+
+                // Frente da Gaveta
+                const frenteGeo = new THREE.BoxGeometry(gavW - 0.005, gavH - 0.005, thickness);
+                const frente = createPart(frenteGeo, 0, 0, d/2 - thickness/2);
+                gavGroup.add(frente);
+
+                // Corpo da gaveta (caixa interna)
+                const intW = gavW - 0.05;
+                const intH = gavH * 0.7;
+                const intD = d - 0.05;
+                const caixaInternaGeo = new THREE.BoxGeometry(intW, intH, intD);
+                const caixaInterna = createPart(caixaInternaGeo, 0, -gavH/2 + intH/2, -0.02);
+                gavGroup.add(caixaInterna);
+
+                modGroup.add(gavGroup);
+            }
+        } 
+        // 3. Portas Matemáticas (Com pivô exato na aresta)
+        else if (mod.portas > 0) {
+            const portaW = (w - (thickness * 2)) / mod.portas;
+            const portaH = h - (thickness * 2);
+            const portaGeo = new THREE.BoxGeometry(portaW - 0.005, portaH - 0.005, thickness);
+
+            for (let i = 0; i < mod.portas; i++) {
+                // Matemática do Pivô: Onde a dobradiça fica?
+                // Se for a primeira porta (i=0), dobradiça na esquerda. Se i=1, dobradiça na direita.
+                const isLeftHinge = (i % 2 === 0);
+                
+                // O grupo pivô é ancorado na dobradiça
+                const pivotGroup = new THREE.Group();
+                pivotGroup.userData = { 
+                    isAnimatable: true, 
+                    type: 'door', 
+                    isOpen: false, 
+                    hinge: isLeftHinge ? 'left' : 'right' 
+                };
+
+                // Posição X do pivô em relação ao centro do móvel
+                const startX = -w/2 + thickness + (i * portaW);
+                const hingeX = startX + (isLeftHinge ? 0 : portaW);
+                
+                pivotGroup.position.set(hingeX, h/2, d/2); // Y central, Z na frente
+
+                // A malha da porta precisa ser deslocada do seu pivô
+                const portaMesh = createPart(portaGeo, isLeftHinge ? portaW/2 : -portaW/2, 0, 0);
+                
+                // Puxador
+                const handleGeo = new THREE.BoxGeometry(0.02, 0.15, 0.02);
+                const matHandle = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.2 });
+                const handle = new THREE.Mesh(handleGeo, matHandle);
+                handle.position.set(isLeftHinge ? portaW - 0.04 : -portaW + 0.04, 0, 0.02);
+                portaMesh.add(handle);
+
+                pivotGroup.add(portaMesh);
+                modGroup.add(pivotGroup);
+            }
+        }
+
+        // Posiciona o módulo no mundo (alinha na base e empurra pro lado)
+        modGroup.position.set(offsetX + (w/2), 0, 0);
+        offsetX += w + 0.05; // Gap de 5cm entre módulos
+        
+        masterGroup.add(modGroup);
     });
-    
-    const custoTotal = vMdf + vFer + pMO;
-    const vendaFinal = custoTotal / (1 - (pLuc/100));
 
-    const sMdf = document.getElementById('valMdf'); if(sMdf) sMdf.textContent = `R$ ${vMdf.toFixed(2)}`;
-    const sFer = document.getElementById('valFer'); if(sFer) sFer.textContent = `R$ ${vFer.toFixed(2)}`;
-    const sFix = document.getElementById('valFix'); if(sFix) sFix.textContent = `R$ ${pMO.toFixed(2)}`;
-    const sCD = document.getElementById('lblCustoDireto'); if(sCD) sCD.textContent = `R$ ${custoTotal.toFixed(2)}`;
-    const sTF = document.getElementById('totalProjectCost'); if(sTF) sTF.textContent = `R$ ${vendaFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-}
-
-function ativarEdicaoModulo(idx) {
-    fecharHUDs();
-    idxEditando = idx; controles3D.enabled = false; isEditingMode = true;
-    const m = dadosProjeto.modulos[idx];
-    
-    const title = document.getElementById('hudTitle'); if (title) title.innerText = m.nome || `Módulo ${idx+1}`;
-    
-    const cI = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
-    const cT = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
-    
-    cI('modFormato', m.formato || 'armario');
-    cI('modCorCaixa', "#" + HexSafe(m.cor_caixa, "#ECF0F1").getHexString());
-    cI('modCorPorta', "#" + HexSafe(m.cor_portas, "#DDA15E").getHexString());
-    
-    cI('modW', m.largura); cT('valW', Math.round(m.largura));
-    cI('modH', m.altura); cT('valH', Math.round(m.altura));
-    cI('modD', m.profundidade); cT('valD', Math.round(m.profundidade));
-    cI('modPrat', m.prateleiras); cT('valPrat', m.prateleiras);
-    cI('modGav', m.gavetas); cT('valGav', m.gavetas);
-    cI('modPor', m.portas); cT('valPor', m.portas);
-    cI('modAbertura', m.tipo_abertura || 'giro');
-    
-    const eH = document.getElementById('editHUD'); if (eH) eH.style.display = 'flex';
-    
-    if (window.boxHelper) { cena3D.remove(window.boxHelper); window.boxHelper = null; }
-    if(grupoCozinha && grupoCozinha.children.length > 0) {
-        const tM = grupoCozinha.children.find(c => c.userData.idx === idx);
-        if(tM) { window.boxHelper = new THREE.BoxHelper(tM, 0xffeb3b); cena3D.add(window.boxHelper); }
-    }
-
-    if (controles3D && camera3D) {
-        controles3D.target.set(controles3D.target.x, controles3D.target.y - 0.8, controles3D.target.z); 
-        camera3D.position.set(camera3D.position.x, camera3D.position.y - 0.8, camera3D.position.z); 
-        controles3D.update();
+    // Centraliza a câmera baseado no tamanho total
+    if (offsetX > 0) {
+        controls.target.set(offsetX/2, 1, 0);
+        camera.position.set(offsetX/2, 1.5, 3.5);
+        controls.update();
     }
 }
 
-function fecharHUDs() {
-    idxEditando = null; isEditingMode = false; if (controles3D) controles3D.enabled = true; 
-    
-    const eH = document.getElementById('editHUD'); if (eH) eH.style.display = 'none';
-    const pH = document.getElementById('perspectiveHUD'); if (pH) pH.style.display = 'none';
-    
-    if (window.boxHelper && cena3D) { cena3D.remove(window.boxHelper); window.boxHelper = null; }
 
-    if (controles3D && camera3D) {
-        controles3D.target.set(controles3D.target.x, controles3D.target.y + 0.8, controles3D.target.z); 
-        camera3D.position.set(camera3D.position.x, camera3D.position.y + 0.8, camera3D.position.z); 
-        controles3D.update();
+// ================= CÉREBRO MULTI-AGENTE (SOLUÇÃO DE ALUCINAÇÃO) =================
+async function analisarComIA() {
+    const input = document.getElementById('fotoCliente');
+    if (!input.files || input.files.length === 0) {
+        document.getElementById('iaErrorBox').innerText = "Selecione ou tire uma foto primeiro.";
+        return;
     }
-}
 
-function atualizarModulo() {
-    if (idxEditando === null) return;
-    const m = dadosProjeto.modulos[idxEditando];
-    
-    const v = id => document.getElementById(id)?.value;
-    m.formato = v('modFormato') || 'armario';
-    m.cor_caixa = v('modCorCaixa') || '#ECF0F1';
-    m.cor_portas = v('modCorPorta') || '#DDA15E';
-    
-    m.largura = parseFloat(v('modW')) || 800; const valW = document.getElementById('valW'); if (valW) valW.innerText = m.largura;
-    m.altura = parseFloat(v('modH')) || 800; const valH = document.getElementById('valH'); if (valH) valH.innerText = m.altura;
-    m.profundidade = parseFloat(v('modD')) || 500; const valD = document.getElementById('valD'); if (valD) valD.innerText = m.profundidade;
-    m.prateleiras = parseInt(v('modPrat')) || 0; const valPrat = document.getElementById('valPrat'); if (valPrat) valPrat.innerText = m.prateleiras;
-    m.gavetas = parseInt(v('modGav')) || 0; const valGav = document.getElementById('valGav'); if (valGav) valGav.innerText = m.gavetas;
-    m.portas = parseInt(v('modPor')) || 0; const valPor = document.getElementById('valPor'); if (valPor) valPor.innerText = m.portas;
-    m.tipo_abertura = v('modAbertura') || 'giro';
-
-    gerarMovel3D();
-    if(grupoCozinha && grupoCozinha.children.length > 0) {
-        const tM = grupoCozinha.children.find(c => c.userData.idx === idxEditando);
-        if(tM) { if(window.boxHelper)cena3D.remove(window.boxHelper); window.boxHelper = new THREE.BoxHelper(tM, 0xffeb3b); cena3D.add(window.boxHelper); }
+    const apikey = AppState.chavesAPI.gemini;
+    if (!apikey) {
+        alert("Configuração Requerida: Acesse a engrenagem (Canto superior direito) e insira a Chave da API do Gemini.");
+        toggleModal('modalSettings');
+        return;
     }
-}
 
-function duplicarModulo() {
-    if (idxEditando === null) return;
-    const nMod = JSON.parse(JSON.stringify(dadosProjeto.modulos[idxEditando])); nMod.nome += " (Cópia)";
-    dadosProjeto.modulos.splice(idxEditando + 1, 0, nMod);
-    fecharHUDs(); gerarMovel3D();
-}
+    showLoading("A IA está analisando cada detalhe da imagem...");
+    document.getElementById('iaErrorBox').innerText = "";
 
-function apagarModulo() {
-    if (idxEditando === null) return; 
-    dadosProjeto.modulos.splice(idxEditando, 1);
-    fecharHUDs(); gerarMovel3D();
-}
-
-function toggleAR() {
-    if (!base64Img) { alert("Envie a foto do local antes!"); return; }
-    const w = document.getElementById('container3DWrapper'); const bg = document.getElementById('arBackgroundImage'); const uT = document.getElementById('arUITop');
-    modoARAtivo = !modoARAtivo;
-    
-    if (modoARAtivo) {
-        if (w) w.classList.add('fullscreen-ar'); 
-        if (bg) { bg.src = base64Img; bg.style.display = 'block'; }
-        if (uT) uT.style.display = 'flex';
+    try {
+        const file = input.files[0];
+        const base64Str = await converterParaBase64(file);
         
-        const i3 = document.getElementById('info3D'); if (i3) i3.style.display = 'none'; 
-        const is3 = document.getElementById('instrucao3D'); if (is3) is3.style.display = 'none';
+        // PROMPT RIGOROSO: Combate o Viés de Concordância e forca Array Completo
+        const systemPrompt = `
+            Você é um Engenheiro Projetista Mestre Especialista em Marcenaria Sob Medida e Leitura de Plantas.
+            Sua missão OBRIGATÓRIA é analisar a foto enviada e mapear ABSOLUTAMENTE TODOS os módulos de armários visíveis.
+            
+            REGRAS INQUEBRÁVEIS:
+            1. NÃO SINTETIZE. Se houver 4 gaveteiros, 1 porta-tempero e 3 aéreos, você DEVE retornar 8 objetos no array.
+            2. Estime as medidas (largura, altura, profundidade) em MILÍMETROS com base na proporção padrão. (Ex: Bancada=850h, Aéreo=600h).
+            3. Detecte a cor predominante e converta para Hexadecimal (ex: "#FFFFFF" para branco, "#4A3C30" para madeira escura).
+            4. Conte o número de portas e gavetas de cada bloco individual.
+            
+            O RETORNO DEVE SER ESTRITAMENTE UM JSON NESTE FORMATO EXATO, SEM MARKDOWN, SEM TEXTOS ADICIONAIS:
+            {
+                "modulos": [
+                    { "nome": "Balcão Pia", "largura": 1200, "altura": 850, "profundidade": 550, "portas": 2, "gavetas": 0, "cor": "#F5F5DC" },
+                    { "nome": "Gaveteiro", "largura": 500, "altura": 850, "profundidade": 550, "portas": 0, "gavetas": 4, "cor": "#F5F5DC" }
+                ]
+            }
+        `;
+
+        const requestBody = {
+            contents: [{
+                parts: [
+                    { text: systemPrompt },
+                    { inlineData: { mimeType: file.type, data: base64Str } }
+                ]
+            }]
+        };
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apikey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
         
-        if (controles3D) { controles3D.target.set(0, 0, 0); controles3D.update(); }
-        if (camera3D) { camera3D.position.set(0, 0, 5); }
-        abrirHUDPerspectiva();
+        if(data.error) throw new Error(data.error.message);
+
+        let respostaTexto = data.candidates[0].content.parts[0].text;
+        // Limpeza de markdown caso a IA desobedeça
+        respostaTexto = respostaTexto.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const iaJSON = JSON.parse(respostaTexto);
+
+        if (iaJSON.modulos && Array.isArray(iaJSON.modulos)) {
+            // Substitui o projeto atual pela visão da IA
+            AppState.modulos = iaJSON.modulos.map((m, idx) => ({ ...m, id: Date.now() + idx }));
+            
+            reconstruirCena();
+            atualizarHUDLista();
+            calcularCustosGlobais();
+            
+            toggleHUD('hudIA'); // Fecha HUD
+            alert(`Sucesso! A IA identificou ${AppState.modulos.length} módulos no ambiente.`);
+        } else {
+            throw new Error("A IA não retornou um array de módulos válido.");
+        }
+
+    } catch (err) {
+        console.error("Erro AI:", err);
+        document.getElementById('iaErrorBox').innerText = "Falha no raciocínio da IA: " + err.message;
+    } finally {
+        hideLoading();
+    }
+}
+
+function converterParaBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+}
+
+
+// ================= BILL OF MATERIALS (BOM) & CUSTOS =================
+function atualizarHUDLista() {
+    const container = document.getElementById('listaModulosContainer');
+    container.innerHTML = '';
+    
+    AppState.modulos.forEach((mod, index) => {
+        container.innerHTML += `
+            <div class="module-card">
+                <h4>${mod.nome}</h4>
+                <p>Medidas: L ${mod.largura} x A ${mod.altura} x P ${mod.profundidade} mm</p>
+                <p>Portas: ${mod.portas} | Gavetas: ${mod.gavetas} | Cor: <span style="display:inline-block; width:15px; height:15px; background:${mod.cor}; border:1px solid #000;"></span></p>
+                <button class="btn-block" style="background:var(--warning-red); color:white; padding:5px; font-size:0.8rem; margin-top:5px;" onclick="removerModulo(${index})">Remover</button>
+            </div>
+        `;
+    });
+}
+
+function removerModulo(index) {
+    AppState.modulos.splice(index, 1);
+    reconstruirCena();
+    atualizarHUDLista();
+    calcularCustosGlobais();
+}
+
+function adicionarModuloManual() {
+    AppState.modulos.push({
+        id: Date.now(),
+        nome: "Novo Módulo Manual",
+        largura: 600,
+        altura: 700,
+        profundidade: 350,
+        portas: 1,
+        gavetas: 0,
+        cor: "#CCCCCC"
+    });
+    reconstruirCena();
+    atualizarHUDLista();
+    calcularCustosGlobais();
+}
+
+function calcularCustosGlobais() {
+    let m2Total = 0;
+
+    // Cálculo exato de M2 de MDF baseado na geometria física gerada
+    AppState.modulos.forEach(mod => {
+        const w = mod.largura / 1000;
+        const h = mod.altura / 1000;
+        const d = mod.profundidade / 1000;
+        
+        // Caixaria (Base + Tampo + 2 Lats + Fundo)
+        const areaBaseTampo = (w * d) * 2;
+        const areaLats = (h * d) * 2;
+        const areaFundo = (w * h);
+        
+        let areaFrentes = 0;
+        if (mod.portas > 0 || mod.gavetas > 0) {
+            areaFrentes = w * h; // Aproximação grosseira da área frontal coberta
+        }
+
+        m2Total += areaBaseTampo + areaLats + areaFundo + areaFrentes;
+    });
+
+    // Puxa valores dos inputs HTML
+    const pM2 = parseFloat(document.getElementById('precoM2').value) || 0;
+    const pFer = parseFloat(document.getElementById('precoFerragem').value) || 0;
+    const pMao = parseFloat(document.getElementById('precoMaoObra').value) || 0;
+    const margem = parseFloat(document.getElementById('margemLucro').value) || 0;
+
+    const custoMaterial = m2Total * pM2;
+    // Custo base de ferragens multiplicado pelo número de módulos para realismo
+    const custoFerragemTotal = pFer * AppState.modulos.length; 
+    
+    const custoDeFabrica = custoMaterial + custoFerragemTotal + pMao;
+    const precoVenda = custoDeFabrica / (1 - (margem / 100));
+
+    document.getElementById('totalM2').innerText = m2Total.toFixed(2);
+    document.getElementById('totalProjectCost').innerText = new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: 'BRL'
+    }).format(precoVenda);
+}
+
+// ================= CONTROLES DE CÂMERA E AR =================
+function resetCamera() {
+    controls.target.set(masterGroup.position.x, 0.5, 0);
+    camera.position.set(0, 1.5, 3.5);
+    controls.update();
+}
+
+function toggleARMode() {
+    AppState.modoAR = !AppState.modoAR;
+    const btnText = document.getElementById('arBtnText');
+    
+    if (AppState.modoAR) {
+        btnText.innerText = "Modo AR: ON (Arraste)";
+        document.getElementById('hudPerspectiva').classList.remove('active'); // Esconde painel
+        alert("Modo AR Ativo: Toque e segure sobre um móvel para arrastá-lo pelo ambiente virtual.");
     } else {
-        fecharHUDs();
-        if (w) w.classList.remove('fullscreen-ar'); 
-        if (bg) bg.style.display = 'none'; 
-        if (uT) uT.style.display = 'none';
-        
-        const i3 = document.getElementById('info3D'); if (i3) i3.style.display = 'block'; 
-        const is3 = document.getElementById('instrucao3D'); if (is3) is3.style.display = 'block';
-        
-        if (rootNode) { rootNode.position.set(0,0,0); rootNode.rotation.set(0,0,0); rootNode.scale.set(1,1,1); }
-        const cI = (id,v) => { const e = document.getElementById(id); if(e) e.value = v; };
-        cI('camPosX',0); cI('camPosY',0); cI('camRotX',0); cI('camRotY',0); cI('camScale',1);
-        const ch = document.getElementById('chkDrag'); if(ch) ch.checked = false;
-        gerarMovel3D(); 
-    }
-    setTimeout(() => { if (camera3D && renderizador3D && w) { camera3D.aspect = w.clientWidth/w.clientHeight; camera3D.updateProjectionMatrix(); renderizador3D.setSize(w.clientWidth, w.clientHeight); } }, 100);
-}
-
-function abrirHUDPerspectiva() {
-    fecharHUDs(); 
-    const pH = document.getElementById('perspectiveHUD'); if (pH) pH.style.display = 'flex';
-    if (controles3D && camera3D) {
-        const t = controles3D.target; const pos = camera3D.position;
-        controles3D.target.set(t.x, t.y - 0.8, t.z); camera3D.position.set(pos.x, pos.y - 0.8, pos.z); controles3D.update();
+        btnText.innerText = "Modo AR: OFF";
     }
 }
-
-function fecharPerspectiva() {
-    const pH = document.getElementById('perspectiveHUD');
-    if(pH && pH.style.display === 'none') return;
-    if(pH) pH.style.display = 'none';
-    if (controles3D && camera3D) {
-        const t = controles3D.target; const pos = camera3D.position;
-        controles3D.target.set(t.x, t.y + 0.8, t.z); camera3D.position.set(pos.x, pos.y + 0.8, pos.z); controles3D.update();
-    }
-}
-
-function aplicarPerspectiva() {
-    if(!rootNode) return;
-    const px = parseFloat(document.getElementById('camPosX')?.value) || 0;
-    const py = parseFloat(document.getElementById('camPosY')?.value) || 0;
-    const rx = parseFloat(document.getElementById('camRotX')?.value) || 0;
-    const ry = parseFloat(document.getElementById('camRotY')?.value) || 0;
-    const sc = parseFloat(document.getElementById('camScale')?.value) || 1;
-    rootNode.position.set(px, py, 0);
-    rootNode.rotation.set(rx, ry, 0); 
-    rootNode.scale.set(sc, sc, sc);
-}
-    </script>
-</body>
-</html>
