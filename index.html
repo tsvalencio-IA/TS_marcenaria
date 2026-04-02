@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AutoCAD Marcenaria IA - Multi-Agente</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Bibliotecas 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        :root {
+            --primary-dark: #4A3C30;     
+            --secondary-wood: #7F5539;   
+            --accent-gold: #DDA15E;      
+            --light-cream: #FDFCF9;      
+            --soft-beige: #FBF8F4;       
+            --earth-green: #6B8E23;      
+            --text-color: #333333;       
+            --border-soft: #C6B6A5;      
+            --bg-light-panel: #EFEAE5;   
+            --warning-red: #dc3545;      
+            --highlight-yellow: #ffeb3b;
+            --danger-red: #f44336;
+            --success-green: #4CAF50;
+            --ai-blue: #2196F3;
+            --shadow-subtle: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --border-radius-soft: 8px;
+        }
+
+        * { box-sizing: border-box; }
+        body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; background-color: var(--light-cream); color: var(--text-color); line-height: 1.6; overflow-x: hidden; }
+        .container { max-width: 1100px; margin: 30px auto; padding: 30px; background-color: var(--soft-beige); border-radius: var(--border-radius-soft); box-shadow: var(--shadow-subtle); position: relative; }
+        
+        h1, h2, h3 { font-family: 'Poppins', sans-serif; color: var(--primary-dark); text-align: center; margin-bottom: 25px; }
+        h1 { font-size: 2.4em; margin-bottom: 10px; border-bottom: 3px solid var(--accent-gold); display: inline-block; padding-bottom: 10px; }
+        h2 { font-size: 1.6em; border-bottom: 2px solid var(--border-soft); padding-bottom: 10px; margin-top: 35px; color: var(--secondary-wood); text-align: left; display: flex; align-items: center; gap: 10px; }
+        
+        .subtitle { text-align: center; color: #6c757d; margin-bottom: 30px; font-size: 1.1em; }
+        
+        .input-group { margin-bottom: 15px; display: flex; flex-direction: column; }
+        .input-group label { display: block; margin-bottom: 6px; font-weight: 600; color: var(--primary-dark); font-size: 0.9em; }
+        .input-group input[type="text"], .input-group input[type="number"], .input-group textarea, .input-group input[type="password"], .input-group input[type="file"], .input-group select { width: 100%; padding: 12px; border: 1px solid var(--border-soft); border-radius: var(--border-radius-soft); font-size: 0.95em; background-color: var(--light-cream); color: var(--text-color); }
+        .input-group input[type="color"] { padding: 2px; height: 40px; cursor: pointer; border: 1px solid var(--border-soft); border-radius: 4px; }
+        .input-group input:focus, .input-group textarea:focus, .input-group select:focus { border-color: var(--secondary-wood); outline: none; box-shadow: 0 0 0 3px rgba(127, 85, 57, 0.2); }
+        textarea { resize: vertical; }
+
+        .section-panel { padding: 25px; background-color: var(--bg-light-panel); border-radius: var(--border-radius-soft); margin-bottom: 30px; border: 1px solid var(--border-soft); box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); }
+        .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .grid-layout-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
+        .full-width { grid-column: 1 / -1; }
+
+        button { background-color: var(--accent-gold); color: var(--primary-dark); padding: 12px 25px; border: none; border-radius: var(--border-radius-soft); cursor: pointer; font-size: 1em; font-weight: 600; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15); }
+        button:hover { background-color: #C38C4B; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); }
+        button:active { transform: translateY(0); }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; transform: none; box-shadow: none; color: #666; }
+
+        .action-buttons { display: flex; justify-content: center; gap: 15px; margin-top: 20px; flex-wrap: wrap;}
+        .btn-primary { background-color: var(--secondary-wood); color: white; }
+        .btn-success { background-color: var(--earth-green); color: white; }
+        .btn-danger { background-color: var(--danger-red); color: white; }
+        .btn-ai { background-color: var(--ai-blue); color: white; width: 100%; padding: 15px; font-size: 1.1em; }
+
+        /* MÓDULO 3D E AR */
+        #container3DWrapper { width: 100%; height: 550px; position: relative; border-radius: var(--border-radius-soft); border: 2px solid var(--primary-dark); overflow: hidden; background: radial-gradient(circle, #ffffff 0%, #D5D8DC 100%); touch-action: none; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        #visualizador3D { width: 100%; height: 100%; position: absolute; top:0; left:0; z-index: 2; display: block; }
+        #arBackgroundImage { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; display: none; }
+        
+        .hud-overlay { position: absolute; top: 15px; left: 15px; background: rgba(30, 40, 50, 0.85); color: #FFF; padding: 10px 15px; border-radius: 6px; font-size: 0.85em; z-index: 5; pointer-events: none; backdrop-filter: blur(4px); }
+        .hud-instructions { position: absolute; bottom: 15px; right: 15px; background: rgba(221, 161, 94, 0.95); color: var(--primary-dark); padding: 8px 15px; border-radius: 20px; font-size: 0.8em; font-weight: 700; pointer-events: none; z-index: 5; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        
+        .ar-ui-top { position: absolute; top: 15px; right: 15px; z-index: 10; display: none; gap: 10px; }
+        .ar-btn { background: var(--warning-red); color: white; border: none; padding: 10px 20px; border-radius: 30px; font-size: 0.9em; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .ar-btn.blue { background: var(--ai-blue); }
+        .fullscreen-ar { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 99999 !important; border-radius: 0 !important; border: none !important; background: #000 !important; }
+
+        /* HUDs INFERIORES */
+        .edit-hud { position: absolute; bottom: 0; left: 0; width: 100%; z-index: 20; display: none; background: rgba(20, 25, 30, 0.95); color: white; padding: 20px; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.6); border-top: 3px solid var(--accent-gold); backdrop-filter: blur(12px); flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; }
+        .edit-hud::-webkit-scrollbar { width: 5px; } .edit-hud::-webkit-scrollbar-thumb { background: var(--accent-gold); border-radius: 3px; }
+        .hud-drag-indicator { width: 50px; height: 5px; background: rgba(255,255,255,0.4); border-radius: 5px; margin: 0 auto 10px auto; }
+        .edit-hud h4 { margin: 0 0 10px 0; color: var(--accent-gold); font-size: 1.2em; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;}
+        
+        .hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .edit-slider { display: flex; flex-direction: column; gap: 5px; }
+        .edit-slider label { display: flex; justify-content: space-between; font-size: 0.85em; color: #E0E0E0; font-weight: 600; margin:0;}
+        .edit-slider input[type="range"] { width: 100%; accent-color: var(--accent-gold); cursor: pointer; }
+        .edit-slider select, .edit-slider input[type="color"] { width: 100%; padding: 8px; background: #2C3E50; color: white; border: 1px solid #7F8C8D; border-radius: 6px; outline: none; font-size: 0.9em; }
+        .hud-btn-close { background: transparent; border: none; color: white; font-size: 1.4em; cursor: pointer; padding: 0; box-shadow: none; }
+        .hud-action-row { display: flex; gap: 10px; margin-top: 10px; grid-column: 1 / -1;}
+        .hud-action-row button { flex: 1; padding: 12px; font-size: 0.95em; }
+        .ar-controls-box { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 10px; }
+
+        /* TABELAS & CUSTOS */
+        .table-responsive { overflow-x: auto; background: #FFF; border-radius: 8px; border: 1px solid var(--border-soft); box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background-color: var(--primary-dark); color: white; font-weight: 600; white-space: nowrap; }
+        tr:hover { background-color: #f9f9f9; }
+        .row-header { background-color: #EFEAE5 !important; font-weight: bold; color: var(--primary-dark); border-top: 2px solid var(--border-soft); }
+
+        .price-summary { margin-top: 30px; padding: 30px; background-color: var(--bg-summary); border-radius: var(--border-radius-soft); border: 2px dashed var(--accent-gold); text-align: center; }
+        .price-summary p { font-size: 2.2em; font-weight: 700; color: var(--primary-dark); margin: 15px 0; }
+        .summary-details { display: inline-block; text-align: left; background: #fff; padding: 20px; border-radius: 8px; border: 1px solid var(--border-soft); font-size: 0.95em; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        .error-message { background-color: #ffebee; border-left: 5px solid #f44336; padding: 15px; margin-top: 15px; border-radius: 5px; color: #c62828; font-size: 0.9em; display: none; }
+        .designer-insight { background-color: #fff3e0; border-left: 5px solid #ff9800; padding: 15px; margin-top: 15px; border-radius: 4px; font-style: italic; color: #555; font-size: 0.95em; margin-bottom: 15px; display: none; }
+        .log-box { background: #1e1e1e; color: #a5d6a7; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.85em; margin-top: 15px; display: none; max-height: 150px; overflow-y: auto; }
+
+        /* FLUTUANTES E RESPONSIVO */
+        footer { text-align: center; margin-top: 60px; padding: 25px; color: #777; font-size: 0.9em; border-top: 1px solid var(--border-soft); background-color: var(--bg-light-panel); }
+        .floating-buttons { position: fixed; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 15px; z-index: 1000; }
+        .floating-button { background-color: var(--secondary-wood); color: white; padding: 12px 20px; border-radius: 30px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); font-size: 1em; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 10px; border: none; }
+        .floating-button:hover { transform: scale(1.05) translateY(-2px); background-color: #6a4933; }
+        .floating-button.mascote { background-color: #FFC107; color: var(--primary-dark); }
+        @media (max-width: 768px) { .container { padding: 15px; margin: 10px; } .grid-layout, .grid-layout-3 { grid-template-columns: 1fr; } #container3DWrapper { height: 450px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="text-align: center;">
+            <h1><i class="fas fa-drafting-compass"></i> AutoCAD Marcenaria IA</h1>
+            <p style="color: #666; font-weight: 500;">Design Paramétrico • Física 3D Inquebrável • AR Dinâmico • Custos Reais</p>
+        </div>
+
+        <!-- 1. IAs -->
+        <section class="section-panel" style="border-top: 4px solid var(--ai-blue);">
+            <h2 style="margin-top:0;"><i class="fas fa-network-wired"></i> Cérebro Multi-Agente</h2>
+            <div class="grid-layout-3">
+                <div class="input-group">
+                    <label style="color: #E67E22;"><i class="fas fa-microphone"></i> Groq (Áudio)</label>
+                    <input type="password" id="keyGroq" placeholder="gsk_...">
+                </div>
+                <div class="input-group">
+                    <label style="color: #8E44AD;"><i class="fas fa-eye"></i> Gemini (Visão/Lógica)</label>
+                    <input type="password" id="keyGemini" placeholder="AIzaSy...">
+                </div>
+                <div class="input-group">
+                    <label style="color: #16A085;"><i class="fas fa-brain"></i> OpenAI (Engine CAD)</label>
+                    <input type="password" id="keyOpenAI" placeholder="sk-...">
+                </div>
+            </div>
+            <button onclick="salvarChaves()" class="btn-success"><i class="fas fa-save"></i> Salvar Chaves</button>
+            <div id="statusChave" style="color: var(--success-green); font-size: 0.9em; margin-top: 10px; display: none; font-weight: bold;"></div>
+        </section>
+
+        <!-- 2. INPUT DE DADOS -->
+        <section class="section-panel">
+            <h2 style="margin-top:0;"><i class="fas fa-clipboard-list"></i> Levantamento do Projeto</h2>
+            <div class="grid-layout">
+                <div class="input-group">
+                    <label><i class="fas fa-camera"></i> Foto da Parede/Ambiente (Ativa AR):</label>
+                    <input type="file" id="inpFoto" accept="image/*" onchange="processarFoto(event)">
+                    <img id="previewImg" style="max-width: 100%; border-radius: 8px; margin-top: 10px; display: none; border: 1px solid #ccc;">
+                </div>
+                <div class="input-group">
+                    <label><i class="fas fa-microphone-alt"></i> Ditar Pedido:</label>
+                    <input type="file" id="inpAudio" accept="audio/*">
+                </div>
+            </div>
+
+            <div class="input-group full-width">
+                <label>Pedido Consolidado:</label>
+                <textarea id="txtPedido" rows="3" placeholder="Ex: Substitua a cozinha da foto por móveis com 3 gavetas e 2 portas. Cor azul escuro."></textarea>
+            </div>
+            
+            <div id="logBox" class="log-box"></div>
+            <div id="errorDisplay" class="error-message"></div>
+
+            <button id="btnProjetar" class="btn-ai" onclick="gerarProjetoIA()">
+                <i class="fas fa-cogs"></i> Projetar Móvel Paramétrico
+            </button>
+        </section>
+
+        <!-- 3. O AUTOCAD 3D -->
+        <section class="section-panel" id="secCAD" style="display: block;">
+            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center;">
+                <h2 style="margin-top:0; border:none;"><i class="fas fa-cube"></i> Gêmeo Digital 3D</h2>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button id="btnAR" class="btn-success" onclick="toggleAR()" style="display: none;"><i class="fas fa-camera-retro"></i> Modo AR Imersivo</button>
+                </div>
+            </div>
+
+            <div id="designerInsight" class="designer-insight">
+                <i class="fas fa-hard-hat"></i> <b>Engenharia Aplicada:</b> <span id="textoDesigner">O motor gráfico aguarda dados para renderização.</span>
+            </div>
+
+            <div id="container3DWrapper">
+                <img id="arBackgroundImage" class="ar-bg-image" src="" alt="Fundo AR">
+                <div id="visualizador3D"></div>
+                
+                <div id="info3D" class="hud-overlay"><i class="fas fa-check-circle" style="color:var(--success-green)"></i> Motor Gráfico Ativo</div>
+                <div id="instrucao3D" class="hud-instructions"><i class="fas fa-mouse-pointer"></i> 1 Toque: Abre Porta. | Toque Longo: Edita.</div>
+                
+                <div id="arUITop" class="ar-ui-top">
+                    <button class="ar-btn blue" onclick="abrirHUDPerspectiva()"><i class="fas fa-arrows-alt"></i> Mover / Escalar</button>
+                    <button class="ar-btn" style="background: var(--danger-red);" onclick="toggleAR()"><i class="fas fa-times"></i> Sair do AR</button>
+                </div>
+                
+                <!-- HUD: Edição do Módulo -->
+                <div id="editHUD" class="edit-hud">
+                    <div class="hud-drag-indicator"></div>
+                    <h4><span id="hudTitle">Módulo</span> <button class="hud-btn-close" onclick="fecharHUDs()"><i class="fas fa-times-circle"></i></button></h4>
+                    
+                    <div class="hud-grid">
+                        <div class="edit-slider full-width" style="grid-column: 1 / -1;">
+                            <label><span>📐 Tipo / Geometria</span></label>
+                            <select id="modFormato" onchange="atualizarModulo()">
+                                <option value="armario">Armário Reto</option>
+                                <option value="mesa">Mesa</option>
+                                <option value="estante">Estante</option>
+                                <option value="painel_tv">Painel de TV</option>
+                                <option value="l_canto">Armário L (Canto)</option>
+                                <option value="curvo">Canto Curvo</option>
+                            </select>
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>🎨 Cor da Caixa</span></label>
+                            <input type="color" id="modCorCaixa" onchange="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>🎨 Cor das Portas</span></label>
+                            <input type="color" id="modCorPorta" onchange="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>↔️ Largura (mm)</span><span id="valW"></span></label>
+                            <input type="range" id="modW" min="200" max="3000" step="10" oninput="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>↕️ Altura (mm)</span><span id="valH"></span></label>
+                            <input type="range" id="modH" min="200" max="3000" step="10" oninput="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>↘️ Profund. (mm)</span><span id="valD"></span></label>
+                            <input type="range" id="modD" min="100" max="1200" step="10" oninput="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>📚 Prateleiras</span><span id="valPrat"></span></label>
+                            <input type="range" id="modPrat" min="0" max="10" step="1" oninput="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>🗄️ Gavetas</span><span id="valGav"></span></label>
+                            <input type="range" id="modGav" min="0" max="10" step="1" oninput="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider">
+                            <label><span>🚪 Portas</span><span id="valPor"></span></label>
+                            <input type="range" id="modPor" min="0" max="6" step="1" oninput="atualizarModulo()">
+                        </div>
+                        <div class="edit-slider full-width" style="grid-column: 1 / -1;">
+                            <label><span>⚙️ Abertura</span></label>
+                            <select id="modAbertura" onchange="atualizarModulo()">
+                                <option value="nenhuma">Aberto (Sem Portas)</option>
+                                <option value="giro">Giro (Lateral)</option>
+                                <option value="basculante">Basculante (Cima)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="hud-action-row">
+                            <button class="btn-success" onclick="duplicarModulo()"><i class="fas fa-copy"></i> Clonar</button>
+                            <button class="btn-danger" onclick="apagarModulo()"><i class="fas fa-trash"></i> Apagar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HUD DE PERSPECTIVA (AR FAKE DRAG) -->
+                <div id="perspectiveHUD" class="edit-hud">
+                    <div class="hud-drag-indicator"></div>
+                    <h4><span><i class="fas fa-arrows-alt"></i> Arrastar e Posicionar</span> <button class="hud-btn-close" onclick="fecharPerspectiva()"><i class="fas fa-times-circle"></i></button></h4>
+                    
+                    <div class="ar-controls-box">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--accent-gold); font-weight: bold;">
+                            <input type="checkbox" id="chkDrag" style="width: 22px; height: 22px;">
+                            <i class="fas fa-hand-paper"></i> Ativar Arrasto Inteligente na Foto
+                        </label>
+                    </div>
+
+                    <div class="edit-slider">
+                        <label><span>Posição X (Esq/Dir)</span></label>
+                        <input type="range" id="camPosX" min="-15" max="15" step="0.1" value="0" oninput="aplicarPerspectiva()">
+                    </div>
+                    <div class="edit-slider">
+                        <label><span>Posição Y (Cima/Baixo)</span></label>
+                        <input type="range" id="camPosY" min="-15" max="15" step="0.1" value="0" oninput="aplicarPerspectiva()">
+                    </div>
+                    <div class="edit-slider">
+                        <label><span>Posição Z (Profundidade)</span></label>
+                        <input type="range" id="camPosZ" min="-15" max="15" step="0.1" value="0" oninput="aplicarPerspectiva()">
+                    </div>
+                    <div class="edit-slider">
+                        <label><span>Escala (Tamanho do Móvel)</span></label>
+                        <input type="range" id="camScale" min="0.1" max="4" step="0.05" value="1" oninput="aplicarPerspectiva()">
+                    </div>
+                    <div class="edit-slider">
+                        <label><span>Girar Móvel (Rotação Y)</span></label>
+                        <input type="range" id="camRotY" min="-3.14" max="3.14" step="0.05" value="0" oninput="aplicarPerspectiva()">
+                    </div>
+                    <div class="edit-slider">
+                        <label><span>Tombar Móvel (Rotação X)</span></label>
+                        <input type="range" id="camRotX" min="-1.5" max="1.5" step="0.05" value="0" oninput="aplicarPerspectiva()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabela Bill of Materials -->
+            <h3 style="margin-top: 30px;"><i class="fas fa-clipboard-list"></i> Bill of Materials (BOM) & Plano de Corte</h3>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr><th>Componente (Estrutura)</th><th>Qtd</th><th>Medidas (mm)</th><th>Consumo Real</th><th>Subtotal Custo</th></tr>
+                    </thead>
+                    <tbody id="tabelaBOM"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 4. ENGINE FINANCEIRA -->
+        <section id="addItemSection" class="section-panel" style="border-left: 4px solid var(--success-green);">
+            <h2 style="margin-top:0;"><i class="fas fa-money-bill-wave"></i> Tabela de Preços (Variáveis de Custo)</h2>
+            <div class="grid-layout-3">
+                <div class="input-group full-width"><label>Nome do Projeto:</label><input type="text" id="itemName" placeholder="Cozinha Modular Inteligente"></div>
+                <div class="input-group"><label>MDF Caixa (R$/m²):</label><input type="number" id="vMdfC" value="110" step="1" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group"><label>MDF Frentes (R$/m²):</label><input type="number" id="vMdfP" value="145" step="1" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group"><label>Fundo 6mm (R$/m²):</label><input type="number" id="vFnd" value="45" step="1" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group"><label>Dobradiça/Pistão (R$/un):</label><input type="number" id="vDob" value="12" step="1" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group"><label>Corrediça Telescópica (R$/Par):</label><input type="number" id="vCor" value="35" step="1" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group"><label>Fita de Borda (R$/m):</label><input type="number" id="vFita" value="2.5" step="0.5" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group"><label>Parafusos/Montagem (R$/kit):</label><input type="number" id="vPar" value="15" step="1" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group"><label>Puxadores (R$/un):</label><input type="number" id="vPux" value="25" step="1" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group full-width"><label>Serviços Fixos / Montagem / Frete (R$):</label><input type="number" id="vFix" value="600" step="10" onchange="calcularMateriaisECustos()"></div>
+                <div class="input-group full-width"><label>Margem Desejada de Lucro (%):</label><input type="number" id="vLucro" value="60" min="0" max="100" step="1" onchange="calcularMateriaisECustos()"></div>
+            </div>
+            <button class="btn-primary" style="margin-top: 15px; width: 100%;" onclick="calcularMateriaisECustos()"><i class="fas fa-sync"></i> Recalcular Orçamento Base</button>
+        </section>
+
+        <section class="price-summary">
+            <h2><i class="fas fa-handshake"></i> Valor Final de Venda Sugerido</h2>
+            <p id="totalProjectCost">R$ 0,00</p>
+            <div class="summary-details">
+                <b>Demonstrativo de Custos Diretos:</b> <span id="lblCustoDireto">R$ 0,00</span><br>
+                <small style="color: #555;">(Chapas/MDF: <span id="valMdf">R$ 0</span> | Ferragens: <span id="valFer">R$ 0</span> | Serviços Fixos: <span id="valFix">R$ 0</span>)</small>
+            </div>
+        </section>
+    </div>
+
+    <!-- SCRIPT DO MOTOR AUTOCAD, FÍSICA E MULTI-AGENTE -->
+    <script>
+        // GLOBALS GERAIS
+        let pGlobal = { modulos: [], instalacao: "piso" };
+        let moduloSendoEditado = null; 
+        let base64Img = null, mimeImg = null;
+        let modoARAtivo = false;
+
+        // GLOBALS THREE.JS
+        let scene, camera, renderer, controls;
+        let motor3DIniciado = false;
+        let rootNode = null, moveisGroup = null;
+        let boxHelper = null; 
+        let objInterativos = [];
+
+        // FÍSICA INTERAÇÃO
+        let pTimer;
+        let pStartX = 0, pStartY = 0;
+        let isEditingMode = false;
+        let isDragging = false, dragPrev = {x:0, y:0};
+
+        window.onload = function() {
+            // Recupera Chaves
+            const kGrq = document.getElementById('keyGroq'); if(kGrq) kGrq.value = localStorage.getItem('ak_grq_f1') || "";
+            const kGem = document.getElementById('keyGemini'); if(kGem) kGem.value = localStorage.getItem('ak_gem_f1') || "";
+            const kOai = document.getElementById('keyOpenAI'); if(kOai) kOai.value = localStorage.getItem('ak_oai_f1') || "";
+            
+            initMotor3D();
+            
+            // Dados Iniciais Seguros
+            pGlobal.modulos.push({
+                nome: "Módulo Inicial", largura: 800, altura: 850, profundidade: 500, 
+                formato: "armario", prateleiras: 1, gavetas: 3, portas: 1, 
+                tipo_abertura: "giro", cor_caixa: "#EFEAE5", cor_portas: "#DDA15E"
+            });
+            gerarMovel3D();
+        };
+
+        // UTILITÁRIOS
+        function logM(msg) {
+            const b = document.getElementById('logBox'); 
+            if(b) { b.style.display = 'block'; b.innerHTML += `<div>> ${msg}</div>`; b.scrollTop = b.scrollHeight; }
+        }
+        function clearLog() { const b = document.getElementById('logBox'); if(b) { b.innerHTML = ""; b.style.display = "none"; } }
+        function mostrarErro(msg) { const e = document.getElementById('errorDisplay'); if(e) { e.innerHTML = `<strong>Aviso:</strong> ${msg}`; e.style.display = 'block'; } }
+        
+        function salvarChaves() {
+            localStorage.setItem('ak_grq_f1', document.getElementById('keyGroq')?.value.trim() || "");
+            localStorage.setItem('ak_gem_f1', document.getElementById('keyGemini')?.value.trim() || "");
+            localStorage.setItem('ak_oai_f1', document.getElementById('keyOpenAI')?.value.trim() || "");
+            const s = document.getElementById('statusChave'); 
+            if(s) { s.style.display='block'; setTimeout(()=>s.style.display='none', 3000); }
+        }
+
+        function processarFoto(e) {
+            const f = e.target.files[0]; if (!f) return;
+            mimeImg = f.type;
+            const r = new FileReader();
+            r.onload = ev => {
+                const i = new Image();
+                i.onload = () => {
+                    const c = document.createElement('canvas');
+                    let w = i.width, h = i.height;
+                    if(w>800 || h>800) { const sf = Math.min(800/w, 800/h); w*=sf; h*=sf; }
+                    c.width = w; c.height = h; c.getContext('2d').drawImage(i,0,0,w,h);
+                    base64Img = c.toDataURL(mimeImg, 0.7);
+                    const previewImg = document.getElementById('previewImg');
+                    if(previewImg) { previewImg.src = base64Img; previewImg.style.display = 'block'; }
+                    const btn = document.getElementById('btnAR'); if(btn) btn.style.display = 'inline-flex';
+                }
+                i.src = ev.target.result;
+            }
+            r.readAsDataURL(f);
+        }
+
+        document.getElementById('inpAudio')?.addEventListener('change', async function(e) {
+            const f = e.target.files[0]; if (!f) return;
+            const kG = document.getElementById('keyGroq')?.value.trim(); 
+            const kGem = document.getElementById('keyGemini')?.value.trim();
+            
+            const errD = document.getElementById('errorDisplay'); if(errD) errD.style.display='none';
+            const tf = document.getElementById('txtPedido'); if(tf) tf.value = "Transcrição em andamento...";
+            clearLog(); logM("Iniciando conversão de áudio para texto...");
+
+            if (kG) {
+                try {
+                    logM("Tentando Groq Whisper...");
+                    const fd = new FormData(); fd.append("file", f); fd.append("model", "whisper-large-v3-turbo");
+                    const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", { method: 'POST', headers: { "Authorization": `Bearer ${kG}` }, body: fd });
+                    if(res.ok) { const j = await res.json(); if(tf) tf.value = j.text; logM("Sucesso (Groq)."); return; }
+                } catch(err) { logM("Falha no Groq."); }
+            }
+            if (kGem) {
+                try {
+                    logM("Tentando Gemini Flash...");
+                    const r = new FileReader(); r.readAsDataURL(f);
+                    r.onload = async () => {
+                        const p = {contents:[{parts:[{text:"Transcreva esse áudio:"},{inlineData:{mimeType:f.type, data:r.result.split(',')[1]}}]}]};
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${kGem}`,{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p)});
+                        if(res.ok) { const j = await res.json(); if(tf) tf.value = j.candidates[0].content.parts[0].text; logM("Sucesso (Gemini)."); return; }
+                    }; return;
+                } catch(err) { logM("Falha no Gemini."); }
+            }
+            if(tf) tf.value=""; mostrarErro("Nenhuma IA conseguiu transcrever o áudio.");
+        });
+
+        function parseSeguro(txt) {
+            try {
+                let s = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
+                let ini = s.indexOf('{'); let fim = s.lastIndexOf('}');
+                if (ini !== -1 && fim !== -1) s = s.substring(ini, fim + 1);
+                return JSON.parse(s);
+            } catch(e) { throw new Error("A IA gerou a resposta fora do formato. Tente novamente."); }
+        }
+
+        // ==========================================
+        // CÉREBRO DE ENGENHARIA (O PROMPT ABSOLUTO)
+        // ==========================================
+        async function gerarProjetoIA() {
+            const txt = document.getElementById('txtPedido')?.value.trim();
+            const kGem = document.getElementById('keyGemini')?.value.trim();
+            const kGrq = document.getElementById('keyGroq')?.value.trim();
+            const kOai = document.getElementById('keyOpenAI')?.value.trim();
+            
+            const errD = document.getElementById('errorDisplay'); if(errD) errD.style.display = 'none';
+            if (!txt && !base64Img) return mostrarErro("Escreva as diretrizes ou envie uma foto para projetar.");
+            if (!kGem && !kGrq && !kOai) return mostrarErro("Configure pelo menos uma chave de IA (Gemini recomendado).");
+
+            const btn = document.getElementById('btnProjetar');
+            if(btn) { btn.innerHTML = '<i class="fas fa-cog fa-spin"></i> Desenhando Geometria...'; btn.disabled = true; }
+            clearLog();
+
+            let visaoContext = "";
+
+            if (base64Img && kGem) {
+                try {
+                    logM("Analisando imagem com Gemini Vision...");
+                    // Scanner Exato da Imagem
+                    const pl = {contents:[{parts:[{text:"Aja como um Marceneiro de Produção Mestre. Analise a imagem fornecida minuciosamente. O utilizador quer copiar ou substituir esta exata composição. Liste TODOS os módulos de armário / gaveteiros presentes na foto, da esquerda para a direita. Indique a quantidade de portas, gavetas e descreva a cor predominante. Não resuma. Descreva tudo."}, {inlineData:{mimeType:mimeImg, data:base64Img.split(',')[1]}}]}]};
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${kGem}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(pl) });
+                    if(res.ok) { const d = await res.json(); visaoContext = d.candidates[0].content.parts[0].text; logM("Laudo fotográfico gerado com precisão."); }
+                } catch(e) { logM("Falha na visão Gemini."); }
+            }
+
+            // A DIRETRIZ ESTRITA DA IA (Sem viés de simplificação)
+            const promptMestre = `Você é o Cérebro Lógico do AutoCAD de Marcenaria.
+DIRETRIZ MÁXIMA E ABSOLUTA: Se o cliente pedir para "substituir", "copiar" ou fizer referência à foto, VOCÊ DEVE CRIAR UM ARRAY DE MÓDULOS CONTENDO TODAS AS PEÇAS DESCRITAS NO LAUDO FOTOGRÁFICO (ex: se o laudo viu 4 módulos, crie 4 objetos no JSON). Se o cliente ditar uma cor nova (ex: "azul"), aplique o código HEX correspondente a essa cor a todos os módulos.
+
+Pedido do Cliente: "${txt}"
+Laudo Fotográfico da Cena: "${visaoContext || "Nenhuma foto anexada."}"
+
+FORMATO ESTRITO (Retorne APENAS um JSON válido, sem comentários externos):
+{
+  "nome_projeto": "Nome",
+  "engenharia": "Dividi a cozinha solicitada em X módulos para fabricação...",
+  "instalacao": "piso",
+  "modulos": [
+    {
+      "nome": "Modulo Esquerdo",
+      "formato": "armario", 
+      "largura": 600,
+      "altura": 800,
+      "profundidade": 500,
+      "gavetas": 3,
+      "portas": 0,
+      "prateleiras": 0,
+      "tipo_abertura": "nenhuma",
+      "cor_caixa": "#ECF0F1",
+      "cor_portas": "#1E90FF"
+    }
+    // Adicione mais módulos aqui para replicar a imagem fielmente
+  ]
+}`;
+
+            let jsonR = null;
+
+            if (kOai && !jsonR) {
+                try {
+                    logM("Enviando cálculos para OpenAI...");
+                    const res = await fetch("https://api.openai.com/v1/chat/completions", { method: 'POST', headers: { "Authorization": `Bearer ${kOai}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "gpt-4o-mini", messages: [{role: "user", content: promptMestre}], temperature: 0.1, response_format: {type:"json_object"} }) });
+                    if(res.ok) { const d = await res.json(); jsonR = safeParse(d.choices[0].message.content); logM("OpenAI concluiu mapeamento."); }
+                } catch(e) { logM("OpenAI falhou."); }
+            }
+            if (kGrq && !jsonR) {
+                try {
+                    logM("Enviando cálculos para Groq Llama...");
+                    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: 'POST', headers: { "Authorization": `Bearer ${kGrq}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{role: "user", content: promptMestre}], temperature: 0.1, response_format: {type:"json_object"} }) });
+                    if(res.ok) { const d = await res.json(); jsonR = safeParse(d.choices[0].message.content); logM("Groq concluiu mapeamento."); }
+                } catch(e) { logM("Groq falhou."); }
+            }
+            if (kGem && !jsonR) {
+                try {
+                    logM("Enviando cálculos para Gemini Lógico...");
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${kGem}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({contents: [{parts: [{text: promptMestre}]}], generationConfig: {temperature: 0.1, responseMimeType: "application/json"}}) });
+                    if(res.ok) { const d = await res.json(); jsonR = safeParse(d.candidates[0].content.parts[0].text); logM("Gemini concluiu mapeamento."); }
+                } catch(e) { logM("Gemini falhou."); }
+            }
+
+            if(btn) { btn.innerHTML = '<i class="fas fa-cogs"></i> Projetar Móvel Paramétrico'; btn.disabled = false; }
+
+            if(!jsonR) return mostrarErro("As IAs falharam. Verifique conectividade/chaves.");
+
+            dadosProjeto.modulos = jsonR.modulos || [];
+            dadosProjeto.instalacao = jsonR.instalacao || "piso";
+
+            const secCAD = document.getElementById('secCAD'); if(secCAD) secCAD.style.display = 'block';
+            const dIns = document.getElementById('designerInsight'); if(dIns) dIns.style.display = 'block';
+            const tDes = document.getElementById('textoDesigner'); if(tDes) tDes.innerText = jsonR.engenharia || "Geometria renderizada.";
+            const itN = document.getElementById('itemName'); if(itN) itN.value = jsonR.nome_projeto || "Móvel Substituído";
+
+            fecharHUDs(); 
+            gerarMovel3D(); 
+            if(modoARAtivo) toggleAR(); // Reset AR View
+        }
+
+        // ==========================================
+        // MOTOR 3D GRÁFICO (RENDER E RAYCASTER BLINDADO)
+        // ==========================================
+        function initMotor3D() {
+            const w = document.getElementById('container3DWrapper');
+            if (!w) return;
+            scene = new THREE.Scene(); scene.background = null;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const dl = new THREE.DirectionalLight(0xffffff, 0.6); dl.position.set(3, 6, 5); scene.add(dl);
+            const dl2 = new THREE.DirectionalLight(0xDDA15E, 0.3); dl2.position.set(-3, -2, -3); scene.add(dl2);
+
+            camera = new THREE.PerspectiveCamera(45, w.clientWidth / w.clientHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setClearColor( 0x000000, 0 ); 
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(w.clientWidth, w.clientHeight);
+            const v3d = document.getElementById('visualizador3D');
+            if (v3d) v3d.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; controls.dampingFactor = 0.05;
+
+            rootNode = new THREE.Group(); scene.add(rootNode);
+
+            // EVENTOS DE PONTEIRO
+            renderer.domElement.addEventListener('pointerdown', e => {
+                pStartX = e.clientX; pStartY = e.clientY;
+                
+                const chkDrag = document.getElementById('chkDrag');
+                if (modoARAtivo && chkDrag && chkDrag.checked) {
+                    isDragging = true; controls.enabled = false; dragPrev = {x: e.clientX, y: e.clientY}; return;
+                }
+
+                const hit = castRay(e);
+                if (hit && !isEditingMode) {
+                    pTimer = setTimeout(() => ativarEdicaoModulo(hit.idx), 450);
+                }
+            });
+
+            renderer.domElement.addEventListener('pointermove', e => {
+                if (isDragging && rootNode) {
+                    const dx = e.clientX - dragPrev.x; const dy = e.clientY - dragPrev.y;
+                    rootNode.position.x += dx * 0.01; rootNode.position.y -= dy * 0.01;
+                    const cx = document.getElementById('camPosX'); if (cx) cx.value = rootNode.position.x;
+                    const cy = document.getElementById('camPosY'); if (cy) cy.value = rootNode.position.y;
+                    dragPrev = {x: e.clientX, y: e.clientY}; return;
+                }
+                if (Math.abs(e.clientX - pStartX) > 5 || Math.abs(e.clientY - pStartY) > 5) clearTimeout(pTimer);
+            });
+
+            renderer.domElement.addEventListener('pointerup', e => {
+                clearTimeout(pTimer);
+                if (isDragging) { isDragging = false; if(!isEditingMode) controls.enabled = true; return; }
+                
+                // Abre a porta/gaveta de fato
+                if (Math.abs(e.clientX - pStartX) < 5 && Math.abs(e.clientY - pStartY) < 5 && !isEditingMode) {
+                    const hit = castRay(e);
+                    if (hit && hit.animavel) {
+                        hit.animavel.userData.aberto = !hit.animavel.userData.aberto;
+                    }
+                }
+            });
+
+            renderer.domElement.addEventListener('wheel', e => {
+                if (modoARAtivo && rootNode) {
+                    e.preventDefault();
+                    const ns = rootNode.scale.x * (e.deltaY > 0 ? 0.95 : 1.05);
+                    if(ns >= 0.1 && ns <= 4) {
+                        rootNode.scale.set(ns, ns, ns);
+                        const sc = document.getElementById('camScale'); if(sc) sc.value = ns;
+                    }
+                }
+            }, { passive: false });
+
+            const ray = new THREE.Raycaster();
+            const mouseV = new THREE.Vector2();
+
+            function castRay(evt) {
+                const r = renderer.domElement.getBoundingClientRect();
+                mouseV.x = ((evt.clientX - r.left)/r.width)*2-1; 
+                mouseV.y = -((evt.clientY - r.top)/r.height)*2+1;
+                ray.setFromCamera(mouseV, camera);
+                
+                if(!moveisGroup || moveisGroup.children.length === 0) return null;
+                
+                const ints = ray.intersectObjects(moveisGroup.children, true); 
+                if (ints.length > 0) {
+                    let curr = ints[0].object;
+                    let objA = null; let objM = null; let idxM = null;
+                    
+                    // Sobe na hierarquia para achar o pivô da gaveta/porta ou o módulo inteiro
+                    while(curr && curr !== scene) {
+                        if (curr.userData) {
+                            if (curr.userData.animavel) objA = curr;
+                            if (curr.userData.isMod) { objM = curr; idxM = curr.userData.idx; }
+                        }
+                        curr = curr.parent;
+                    }
+                    if (objM) return { obj: objM, idx: idxM, animavel: objA };
+                } 
+                return null;
+            }
+
+            function loopGrafico() {
+                requestAnimationFrame(loopGrafico);
+                
+                // Animação Traverse garantida
+                if (moveisGroup) {
+                    moveisGroup.traverse(obj => {
+                        const d = obj.userData;
+                        if (!d || !d.animavel) return;
+                        if(d.tipo === 'giro') obj.rotation.y += ((d.aberto ? d.rotAbre : 0) - obj.rotation.y) * 0.15;
+                        if(d.tipo === 'basculante') obj.rotation.x += ((d.aberto ? d.rotAbre : 0) - obj.rotation.x) * 0.15;
+                        if(d.tipo === 'gaveta') obj.position.z += ((d.aberto ? d.zOpen : d.zOrig) - obj.position.z) * 0.15;
+                    });
+                }
+                
+                if (boxHelper) boxHelper.update();
+                controls.update(); renderer.render(scene, camera);
+            }
+            loopGrafico(); 
+            
+            window.addEventListener('resize', () => { 
+                const wr = document.getElementById('container3DWrapper');
+                if (wr && camera && renderer) {
+                    camera.aspect = wr.clientWidth/wr.clientHeight; 
+                    camera.updateProjectionMatrix(); 
+                    renderer.setSize(wr.clientWidth, wr.clientHeight); 
+                }
+            });
+        }
+
+        // ==========================================
+        // CONSTRUTOR GEOMÉTRICO EXATO
+        // ==========================================
+        function getHexColor(hexStr, fallback) { 
+            if(!hexStr) return new THREE.Color(fallback);
+            const dic = {"azul":"#1E90FF", "vermelho":"#E74C3C", "verde":"#2ECC71", "amarelo":"#F1C40F", "branco":"#FFFFFF", "preto":"#111111", "madeira":"#D35400", "cinza":"#95A5A6"};
+            let finalHex = dic[hexStr.toLowerCase().trim()] || hexStr;
+            try { return new THREE.Color(finalHex); } catch(e) { return new THREE.Color(fallback); } 
+        }
+
+        function gerarMovel3D() {
+            if (moveisGroup) rootNode.remove(moveisGroup);
+            if (boxHelper) { scene.remove(boxHelper); boxHelper = null; }
+            
+            moveisGroup = new THREE.Group(); 
+            rootNode.add(moveisGroup);
+
+            const E = 0.018; const F = 0.003; 
+
+            // Dimensão Global
+            let LTotal = 0, HMax = 0;
+            dadosProjeto.modulos.forEach(m => { 
+                m.largura = Number(m.largura)||800; m.altura = Number(m.altura)||800; m.profundidade = Number(m.profundidade)||500;
+                m.gavetas = Number(m.gavetas)||0; m.portas = Number(m.portas)||0; m.prateleiras = Number(m.prateleiras)||0;
+                LTotal += m.largura; if(m.altura > HMax) HMax = m.altura; 
+            });
+
+            const TW = LTotal / 1000, TH = HMax / 1000;
+            moveisGroup.position.y = (dadosProjeto.instalacao === "piso") ? 0 : 1.2;
+            let cursorX = -TW / 2; 
+
+            function criarChapa(w, h, d, mat, x, y, z, pGrp) {
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+                const lMat = new THREE.LineBasicMaterial({color:0x000000, opacity:0.15, transparent:true});
+                mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), lMat));
+                mesh.position.set(x, y, z); pGrp.add(mesh);
+                return mesh;
+            }
+
+            dadosProjeto.modulos.forEach((mod, idx) => {
+                const W = mod.largura/1000, H = mod.altura/1000, D = mod.profundidade/1000;
+                const mG = new THREE.Group(); 
+                mG.position.set(cursorX + W/2, 0, 0); 
+                mG.userData = { isMod: true, idx: idx }; 
+                
+                const fmt = mod.formato || 'armario';
+                const mCaixa = new THREE.MeshStandardMaterial({ color: getHexColor(mod.cor_caixa, "#ECF0F1"), roughness: 0.9 });
+                const mPorta = new THREE.MeshStandardMaterial({ color: getHexColor(mod.cor_portas, "#DDA15E"), roughness: 0.5 });
+
+                if (fmt === 'armario' || fmt === 'reto' || fmt === 'estante') {
+                    criarChapa(W, E, D, mCaixa, 0, E/2, D/2, mG); // Base
+                    criarChapa(W, E, D, mCaixa, 0, H-E/2, D/2, mG); // Topo
+                    criarChapa(E, H, D, mCaixa, -W/2+E/2, H/2, D/2, mG); // Esq
+                    criarChapa(E, H, D, mCaixa, W/2-E/2, H/2, D/2, mG); // Dir
+                    criarChapa(W-E*2, H-E*2, 0.006, mCaixa, 0, H/2, 0.01, mG); // Fundo
+                    
+                    const hInt = H - E*2;
+                    let hPor = hInt, gavY = E;
+
+                    // Gavetas (Física de eixo Z)
+                    if(mod.gavetas > 0) {
+                        const hAreaGav = mod.portas > 0 ? hInt * 0.4 : hInt; 
+                        hPor = hInt - hAreaGav; 
+                        gavY = E + hPor; 
+                        const gH = hAreaGav / mod.gavetas;
+                        for(let i=0; i<mod.gavetas; i++) {
+                            const bGav = new THREE.Group(); 
+                            bGav.position.set(0, gavY + (i*gH) + gH/2, D/2); 
+                            criarChapa(W-E*2-F*2, gH-F, E, mPorta, 0, 0, E/2, bGav); // Frente
+                            criarChapa(W-E*4, gH-E*2, D-E, mCaixa, 0, 0, -(D-E)/2 + E, bGav); // Caixa
+                            bGav.userData = { animavel: true, tipo: 'gaveta', aberto: false, zOrig: D/2, zOpen: D/2 + D*0.8 };
+                            mG.add(bGav); 
+                        }
+                    }
+
+                    if (mod.prateleiras > 0 && hPor > 0.1) {
+                        const esp = hPor / (mod.prateleiras + 1);
+                        for(let i=1; i<=mod.prateleiras; i++) criarChapa(W - E*2, E, D - E - 0.01, mCaixa, 0, E + (esp * i), D/2 - 0.005, mG);
+                    }
+
+                    // Portas (Matemática Exata de Pivô para Multi-Portas)
+                    if (mod.portas > 0 && mod.tipo_abertura !== 'nenhuma' && hPor > 0.1) {
+                        if (mod.tipo_abertura === "basculante") {
+                            const pHi = hPor / mod.portas;
+                            for(let i=0; i<mod.portas; i++) {
+                                const bGr = new THREE.Group(); 
+                                bGr.position.set(0, E + (i*pHi) + pHi, D+E/2); 
+                                criarChapa(W-E*2-F*2, pHi-F, E, mPorta, 0, -pHi/2, 0, bGr);
+                                bGr.userData = { animavel: true, tipo: 'basculante', aberto: false, rotAbre: -Math.PI/2.2 };
+                                mG.add(bGr); 
+                            }
+                        } else {
+                            const wI = (W - E*2 - (F * (mod.portas+1))) / mod.portas;
+                            // Ponto Inicial (Borda Esquerda interna do móvel)
+                            const startX = -W/2 + E + F;
+                            
+                            for(let i=0; i<mod.portas; i++) {
+                                const isLeftHinge = i < (mod.portas/2);
+                                
+                                // Se o pivô for na esquerda da porta, o pivô fica no x atual (startX + (wi+F)*i). 
+                                // Se for na direita, soma a largura da porta.
+                                const pivotX = isLeftHinge ? (startX + i * (wI + F)) : (startX + i * (wI + F) + wI);
+                                
+                                const bGr = new THREE.Group(); 
+                                bGr.position.set(pivotX, E + hPor/2, D+E/2); 
+                                
+                                // Desloca a chapa para compensar a posição do pivô
+                                const meshOffsetX = isLeftHinge ? wI/2 : -wI/2;
+                                criarChapa(wI, hPor-F, E, mPorta, meshOffsetX, 0, 0, bGr);
+                                
+                                bGr.userData = { animavel: true, tipo: 'giro', aberto: false, rotAbre: isLeftHinge ? -Math.PI/1.8 : Math.PI/1.8 };
+                                mG.add(bGr); 
+                            }
+                        }
+                    }
+                }
+                else if (fmt === 'l_canto') {
+                    criarChapa(W, E, D, mCaixa, 0, E/2, D/2, mG); 
+                    criarChapa(W, E, D, mCaixa, 0, H-E/2, D/2, mG);
+                    criarChapa(E, H, D, mCaixa, -W/2+E/2, H/2, D/2, mG); 
+                    criarChapa(W-E*2, H, 0.006, mCaixa, 0, H/2, 0.01, mG);
+                    criarChapa(D, E, W-D, mCaixa, W/2-D/2, E/2, D + (W-D)/2, mG);
+                    criarChapa(D, E, W-D, mCaixa, W/2-D/2, H-E/2, D + (W-D)/2, mG);
+                    criarChapa(D, H, E, mCaixa, W/2-D/2, H/2, W-E/2, mG);
+                    criarChapa(E, H, W-D, mCaixa, W/2-D+E/2, H/2, D + (W-D)/2, mG);
+                }
+                else if (fmt === 'curvo') {
+                    criarChapa(W, E, D, mCaixa, 0, E/2, D/2, mG);
+                    criarChapa(W, E, D, mCaixa, 0, H-E/2, D/2, mG);
+                    criarChapa(E, H, D, mCaixa, -W/2+E/2, H/2, D/2, mG);
+                    const cil = new THREE.Mesh(new THREE.CylinderGeometry(W-E, W-E, H-E*2, 16, 1, true, 0, Math.PI/2), mPorta);
+                    cil.material.side = THREE.DoubleSide; cil.position.set(-W/2+E, H/2, E);
+                    mG.add(cil); 
+                }
+                
+                moveisGroup.add(mG); 
+                cursorX += W; 
+            });
+
+            calcularMateriaisECustos();
+
+            // Auto-Enquadramento se não for AR ou Edit
+            if(!isEditingMode && !modoARAtivo && camera) {
+                const ty = dadosProjeto.instalacao === "piso" ? TH/2 : 1.5 + TH/2;
+                camera.position.set(0, ty + 0.5, Math.max(TW, TH)*1.8);
+                controls.target.set(0, ty, 0); 
+                controls.update();
+            }
+        }
+
+        // ==========================================
+        // CALCULO BOM (BILL OF MATERIALS) 
+        // ==========================================
+        function calcularMateriaisECustos() {
+            const tb = document.getElementById('tabelaBOM'); if (!tb) return;
+            tb.innerHTML = '';
+            
+            let vMdf = 0, vFer = 0;
+            
+            const pMCx = parseFloat(document.getElementById('vMdfC')?.value)||0;
+            const pMPt = parseFloat(document.getElementById('vMdfP')?.value)||0;
+            const pFnd = parseFloat(document.getElementById('vFnd')?.value)||0;
+            const pFit = parseFloat(document.getElementById('vFita')?.value)||0;
+            const pDob = parseFloat(document.getElementById('vDob')?.value)||0;
+            const pCor = parseFloat(document.getElementById('vCor')?.value)||0;
+            const pPux = parseFloat(document.getElementById('vPux')?.value)||0;
+            const pPar = parseFloat(document.getElementById('vPar')?.value)||0;
+            const pMO  = parseFloat(document.getElementById('vFix')?.value)||0;
+            const pLuc = parseFloat(document.getElementById('vLucro')?.value)||0;
+            
+            const E = 18; 
+
+            dadosProjeto.modulos.forEach((m, i) => {
+                const W = Number(m.largura)||800, H = Number(m.altura)||800, D = Number(m.profundidade)||500;
+                const p = Number(m.prateleiras)||0, g = Number(m.gavetas)||0, pt = Number(m.portas)||0;
+                const fm = m.formato || 'armario';
+
+                tb.innerHTML += `<tr class="row-header"><td colspan="5"><i class="fas fa-box-open"></i> [M${i+1}] ${m.nome||'Módulo'} (${fm})</td></tr>`;
+
+                if (fm === 'armario' || fm === 'reto' || fm === 'estante') {
+                    const aB = (W*D*2)/1e6; const cB = aB*pMCx; vMdf+=cB;
+                    tb.innerHTML += `<tr><td>Bases Sup/Inf (MDF Caixa)</td><td>2</td><td>${W} x ${D}</td><td>${aB.toFixed(2)} m²</td><td>R$ ${cB.toFixed(2)}</td></tr>`;
+                    
+                    const aL = (H*D*2)/1e6; const cL = aL*pMCx; vMdf+=cL;
+                    tb.innerHTML += `<tr><td>Laterais (MDF Caixa)</td><td>2</td><td>${H} x ${D}</td><td>${aL.toFixed(2)} m²</td><td>R$ ${cL.toFixed(2)}</td></tr>`;
+
+                    if(p > 0) {
+                        const aP = ((W-E*2)*(D-E-10)*p)/1e6; const cP = aP*pMCx; vMdf+=cP;
+                        tb.innerHTML += `<tr><td>Prateleiras Internas</td><td>${p}</td><td>${W-E*2} x ${D-E-10}</td><td>${aP.toFixed(2)} m²</td><td>R$ ${cP.toFixed(2)}</td></tr>`;
+                    }
+                    
+                    let aF = ((W-E*2)*(H-E*2))/1e6; const cF = aF*pFnd; vMdf+=cF;
+                    tb.innerHTML += `<tr><td>Fundo Traseiro 6mm</td><td>1</td><td>${W-E*2} x ${H-E*2}</td><td>${aF.toFixed(2)} m²</td><td>R$ ${cF.toFixed(2)}</td></tr>`;
+
+                    const mFi = ((W*2)+(H*2))/1000; const cFi = mFi*pFit; vMdf+=cFi;
+                    tb.innerHTML += `<tr><td>Fita de Borda Frontal</td><td>-</td><td>Perímetro</td><td>${mFi.toFixed(1)} m</td><td>R$ ${cFi.toFixed(2)}</td></tr>`;
+
+                    const aT = ((W*H)/1e6); const cPar = aT * pPar; vFer+=cPar;
+                    tb.innerHTML += `<tr><td>Kit de Parafusos/Fixação</td><td>-</td><td>-</td><td>${aT.toFixed(2)} m²</td><td>R$ ${cPar.toFixed(2)}</td></tr>`;
+
+                    if(g > 0) {
+                        const hG = Math.round((pt>0 ? (H-E*2)*0.4 : H-E*2)/g);
+                        const aG = (W*hG*g)/1e6; const cG = aG*pMPt; vMdf+=cG;
+                        const cCo = g*pCor; vFer+=cCo;
+                        const cPx = g*pPux; vFer+=cPx;
+                        tb.innerHTML += `<tr><td>Frentes Gaveta (MDF Porta)</td><td>${g}</td><td>${W} x ${hG}</td><td>${aG.toFixed(2)} m²</td><td>R$ ${cG.toFixed(2)}</td></tr>`;
+                        tb.innerHTML += `<tr><td>Corrediças Telescópicas</td><td>${g} Pr</td><td>-</td><td>-</td><td>R$ ${cCo.toFixed(2)}</td></tr>`;
+                        tb.innerHTML += `<tr><td>Puxadores (Gavetas)</td><td>${g} un</td><td>-</td><td>-</td><td>R$ ${cPx.toFixed(2)}</td></tr>`;
+                    }
+
+                    if(pt > 0 && m.tipo_abertura !== 'nenhuma') {
+                        const wp = W/pt; const hp = Math.round(g>0 ? (H-E*2)*0.6 : H-E*2);
+                        const aPo = (wp*hp*pt)/1e6; const cPo = aPo*pMPt; vMdf+=cPo;
+                        const ndob = pt*2; const cDob = ndob*pDob; vFer+=cDob;
+                        const cPx = pt*pPux; vFer+=cPx;
+                        tb.innerHTML += `<tr><td>Portas (${m.tipo_abertura})</td><td>${pt}</td><td>${Math.round(wp)} x ${hp}</td><td>${aPo.toFixed(2)} m²</td><td>R$ ${cPo.toFixed(2)}</td></tr>`;
+                        tb.innerHTML += `<tr><td>Dobradiças/Pistões</td><td>${ndob} un</td><td>-</td><td>-</td><td>R$ ${cDob.toFixed(2)}</td></tr>`;
+                        tb.innerHTML += `<tr><td>Puxadores (Portas)</td><td>${pt} un</td><td>-</td><td>-</td><td>R$ ${cPx.toFixed(2)}</td></tr>`;
+                    }
+                } 
+                else if (fm === 'l_canto') {
+                    const aCa = ((W*D*4)+(H*D*2))/1e6; const cCa = aCa*pMCx; vMdf+=cCa;
+                    tb.innerHTML += `<tr><td>Chapas Canto L (Conjunto)</td><td>-</td><td>Várias</td><td>${aCa.toFixed(2)} m²</td><td>R$ ${cCa.toFixed(2)}</td></tr>`;
+                }
+            });
+            
+            const custoTotal = vMdf + vFer + pMO;
+            const vendaFinal = custoTotal / (1 - (pLuc/100));
+
+            const sMdf = document.getElementById('valMdf'); if(sMdf) sMdf.textContent = `R$ ${vMdf.toFixed(2)}`;
+            const sFer = document.getElementById('valFer'); if(sFer) sFer.textContent = `R$ ${vFer.toFixed(2)}`;
+            const sFix = document.getElementById('valFix'); if(sFix) sFix.textContent = `R$ ${pMO.toFixed(2)}`;
+            const sCD = document.getElementById('lblCustoDireto'); if(sCD) sCD.textContent = `R$ ${custoTotal.toFixed(2)}`;
+            const sTF = document.getElementById('totalProjectCost'); if(sTF) sTF.textContent = `R$ ${vendaFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        }
+
+        // ==========================================
+        // FLUXOS DE INTERFACE E EDIÇÃO
+        // ==========================================
+        function ativarEdicaoModulo(idx) {
+            fecharHUDs();
+            idxEditando = idx; controls.enabled = false; isEditingMode = true;
+            const m = dadosProjeto.modulos[idx];
+            
+            const title = document.getElementById('hudTitle'); if (title) title.innerText = m.nome || `Módulo ${idx+1}`;
+            
+            const cI = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+            const cT = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
+            
+            cI('modFormato', m.formato || 'armario');
+            cI('modCorCaixa', "#" + HexSafe(m.cor_caixa, "#ECF0F1").getHexString());
+            cI('modCorPorta', "#" + HexSafe(m.cor_portas, "#DDA15E").getHexString());
+            
+            cI('modW', m.largura); cT('valW', Math.round(m.largura));
+            cI('modH', m.altura); cT('valH', Math.round(m.altura));
+            cI('modD', m.profundidade); cT('valD', Math.round(m.profundidade));
+            cI('modPrat', m.prateleiras); cT('valPrat', m.prateleiras);
+            cI('modGav', m.gavetas); cT('valGav', m.gavetas);
+            cI('modPor', m.portas); cT('valPor', m.portas);
+            cI('modAbertura', m.tipo_abertura || 'giro');
+            
+            const eH = document.getElementById('editHUD'); if (eH) eH.style.display = 'flex';
+            
+            if (boxHelper) { scene.remove(boxHelper); boxHelper = null; }
+            if(moveisGroup && moveisGroup.children.length > 0) {
+                const tM = moveisGroup.children.find(c => c.userData.idx === idx);
+                if(tM) { boxHelper = new THREE.BoxHelper(tM, 0xffeb3b); scene.add(boxHelper); }
+            }
+
+            if (controls && camera) {
+                controls.target.set(controls.target.x, controls.target.y - 0.8, controls.target.z); 
+                camera.position.set(camera.position.x, camera.position.y - 0.8, camera.position.z); 
+                controls.update();
+            }
+        }
+
+        function fecharHUDs() {
+            idxEditando = null; isEditingMode = false; if (controls) controls.enabled = true; 
+            
+            const eH = document.getElementById('editHUD'); if (eH) eH.style.display = 'none';
+            const pH = document.getElementById('perspectiveHUD'); if (pH) pH.style.display = 'none';
+            
+            if (boxHelper && scene) { scene.remove(boxHelper); boxHelper = null; }
+
+            if (controls && camera) {
+                controls.target.set(controls.target.x, controls.target.y + 0.8, controls.target.z); 
+                camera.position.set(camera.position.x, camera.position.y + 0.8, camera.position.z); 
+                controls.update();
+            }
+        }
+
+        function atualizarModulo() {
+            if (idxEditando === null) return;
+            const m = dadosProjeto.modulos[idxEditando];
+            
+            const v = id => document.getElementById(id)?.value;
+            m.formato = v('modFormato') || 'armario';
+            m.cor_caixa = v('modCorCaixa') || '#ECF0F1';
+            m.cor_portas = v('modCorPorta') || '#DDA15E';
+            
+            m.largura = parseFloat(v('modW')) || 800; const valW = document.getElementById('valW'); if (valW) valW.innerText = m.largura;
+            m.altura = parseFloat(v('modH')) || 800; const valH = document.getElementById('valH'); if (valH) valH.innerText = m.altura;
+            m.profundidade = parseFloat(v('modD')) || 500; const valD = document.getElementById('valD'); if (valD) valD.innerText = m.profundidade;
+            m.prateleiras = parseInt(v('modPrat')) || 0; const valPrat = document.getElementById('valPrat'); if (valPrat) valPrat.innerText = m.prateleiras;
+            m.gavetas = parseInt(v('modGav')) || 0; const valGav = document.getElementById('valGav'); if (valGav) valGav.innerText = m.gavetas;
+            m.portas = parseInt(v('modPor')) || 0; const valPor = document.getElementById('valPor'); if (valPor) valPor.innerText = m.portas;
+            m.tipo_abertura = v('modAbertura') || 'giro';
+
+            gerarMovel3D();
+            if(moveisGroup && moveisGroup.children.length > 0) {
+                const tM = moveisGroup.children.find(c => c.userData.idx === idxEditando);
+                if(tM) { if(boxHelper)scene.remove(boxHelper); boxHelper = new THREE.BoxHelper(tM, 0xffeb3b); scene.add(boxHelper); }
+            }
+        }
+
+        function duplicarModulo() {
+            if (idxEditando === null) return;
+            const nMod = JSON.parse(JSON.stringify(dadosProjeto.modulos[idxEditando])); nMod.nome += " (Cópia)";
+            dadosProjeto.modulos.splice(idxEditando + 1, 0, nMod);
+            fecharHUDs(); gerarMovel3D();
+        }
+
+        function apagarModulo() {
+            if (idxEditando === null) return; 
+            dadosProjeto.modulos.splice(idxEditando, 1);
+            fecharHUDs(); gerarMovel3D();
+        }
+
+        function toggleAR() {
+            if (!imgB64) { alert("Envie a foto do local antes!"); return; }
+            const w = document.getElementById('container3DWrapper'); const bg = document.getElementById('arBackgroundImage'); const uT = document.getElementById('arUITop');
+            modoARAtivo = !modoARAtivo;
+            
+            if (modoARAtivo) {
+                if (w) w.classList.add('fullscreen-ar'); 
+                if (bg) { bg.src = imgB64; bg.style.display = 'block'; }
+                if (uT) uT.style.display = 'flex';
+                
+                const i3 = document.getElementById('info3D'); if (i3) i3.style.display = 'none'; 
+                const is3 = document.getElementById('instrucao3D'); if (is3) is3.style.display = 'none';
+                
+                if (controls) { controls.target.set(0, 0, 0); controls.update(); }
+                if (camera) { camera.position.set(0, 0, 5); }
+                abrirHUDPerspectiva();
+            } else {
+                fecharHUDs();
+                if (w) w.classList.remove('fullscreen-ar'); 
+                if (bg) bg.style.display = 'none'; 
+                if (uT) uT.style.display = 'none';
+                
+                const i3 = document.getElementById('info3D'); if (i3) i3.style.display = 'block'; 
+                const is3 = document.getElementById('instrucao3D'); if (is3) is3.style.display = 'block';
+                
+                if (rootNode) { rootNode.position.set(0,0,0); rootNode.rotation.set(0,0,0); rootNode.scale.set(1,1,1); }
+                const cI = (id,v) => { const e = document.getElementById(id); if(e) e.value = v; };
+                cI('camPosX',0); cI('camPosY',0); cI('camRotX',0); cI('camRotY',0); cI('camScale',1); cI('camPosZ',0);
+                const ch = document.getElementById('chkDrag'); if(ch) ch.checked = false;
+                gerarMovel3D(); 
+            }
+            setTimeout(() => { if (camera && renderer && w) { camera.aspect = w.clientWidth/w.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(w.clientWidth, w.clientHeight); } }, 100);
+        }
+
+        function abrirHUDPerspectiva() {
+            fecharHUDs(); 
+            const pH = document.getElementById('perspectiveHUD'); if (pH) pH.style.display = 'flex';
+            if (controls && camera) {
+                const t = controls.target; const pos = camera.position;
+                controls.target.set(t.x, t.y - 0.8, t.z); camera.position.set(pos.x, pos.y - 0.8, pos.z); controls.update();
+            }
+        }
+
+        function fecharPerspectiva() {
+            const pH = document.getElementById('perspectiveHUD');
+            if(pH && pH.style.display === 'none') return;
+            if(pH) pH.style.display = 'none';
+            if (controls && camera) {
+                const t = controls.target; const pos = camera.position;
+                controls.target.set(t.x, t.y + 0.8, t.z); camera.position.set(pos.x, pos.y + 0.8, pos.z); controls.update();
+            }
+        }
+
+        function aplicarPerspectiva() {
+            if(!rootNode) return;
+            const px = parseFloat(document.getElementById('camPosX')?.value) || 0;
+            const py = parseFloat(document.getElementById('camPosY')?.value) || 0;
+            const pz = parseFloat(document.getElementById('camPosZ')?.value) || 0;
+            const rx = parseFloat(document.getElementById('camRotX')?.value) || 0;
+            const ry = parseFloat(document.getElementById('camRotY')?.value) || 0;
+            const sc = parseFloat(document.getElementById('camScale')?.value) || 1;
+            rootNode.position.set(px, py, pz);
+            rootNode.rotation.set(rx, ry, 0); 
+            rootNode.scale.set(sc, sc, sc);
+        }
+    </script>
+</body>
+</html>
