@@ -498,7 +498,8 @@ async function analisarComIA() {
             }]
         };
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apikey}`, {
+        // CORREÇÃO: Utilizando o modelo gemini-2.5-flash exigido
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apikey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
@@ -549,6 +550,8 @@ function converterParaBase64(file) {
 // ================= BILL OF MATERIALS (BOM) & CUSTOS =================
 function atualizarHUDLista() {
     const container = document.getElementById('listaModulosContainer');
+    if (!container) return; // Proteção extra caso rode com interface diferente
+    
     container.innerHTML = '';
     
     AppState.modulos.forEach((mod, index) => {
@@ -608,11 +611,18 @@ function calcularCustosGlobais() {
         m2Total += areaBaseTampo + areaLats + areaFundo + areaFrentes;
     });
 
-    // Puxa valores dos inputs HTML
-    const pM2 = parseFloat(document.getElementById('precoM2').value) || 0;
-    const pFer = parseFloat(document.getElementById('precoFerragem').value) || 0;
-    const pMao = parseFloat(document.getElementById('precoMaoObra').value) || 0;
-    const margem = parseFloat(document.getElementById('margemLucro').value) || 0;
+    // Puxa valores dos inputs HTML (com proteção contra null)
+    const elM2 = document.getElementById('precoM2');
+    const elFer = document.getElementById('precoFerragem');
+    const elMao = document.getElementById('precoMaoObra');
+    const elLucro = document.getElementById('margemLucro');
+
+    if (!elM2 || !elFer || !elMao || !elLucro) return;
+
+    const pM2 = parseFloat(elM2.value) || 0;
+    const pFer = parseFloat(elFer.value) || 0;
+    const pMao = parseFloat(elMao.value) || 0;
+    const margem = parseFloat(elLucro.value) || 0;
 
     const custoMaterial = m2Total * pM2;
     // Custo base de ferragens multiplicado pelo número de módulos para realismo
@@ -639,10 +649,11 @@ function toggleARMode() {
     const btnText = document.getElementById('arBtnText');
     
     if (AppState.modoAR) {
-        btnText.innerText = "Modo AR: ON (Arraste)";
-        document.getElementById('hudPerspectiva').classList.remove('active'); // Esconde painel
+        if(btnText) btnText.innerText = "Modo AR: ON (Arraste)";
+        const hud = document.getElementById('hudPerspectiva');
+        if (hud) hud.classList.remove('active'); // Esconde painel
         alert("Modo AR Ativo: Toque e segure sobre um móvel para arrastá-lo pelo ambiente virtual.");
     } else {
-        btnText.innerText = "Modo AR: OFF";
+        if(btnText) btnText.innerText = "Modo AR: OFF";
     }
 }
