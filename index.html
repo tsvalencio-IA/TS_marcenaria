@@ -4,361 +4,199 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gerador de Projetos e Orçamentos para Marcenaria - thIAguinho Soluções</title>
-    <meta name="description" content="Sistema CAD 3D Inteligente com Orçamento Real e Validação de Engenharia de Marcenaria.">
+    <meta name="description" content="Sistema CAD 3D Inteligente com Orçamento Real, IA Multimodal e Validação de Engenharia.">
     
-    <!-- Bibliotecas Externas (CDNs Oficiais) -->
+    <!-- Bibliotecas Externas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/stats.min.js"></script>
     
     <style>
         :root {
-            --primary: #2563eb;
-            --primary-dark: #1e40af;
-            --secondary: #0f172a;
-            --accent: #f59e0b;
-            --bg: #f8fafc;
-            --surface: #ffffff;
-            --text: #1e293b;
-            --text-light: #64748b;
-            --danger: #ef4444;
-            --success: #10b981;
-            --radius: 12px;
-            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --primary: #2563eb; --primary-dark: #1e40af; --secondary: #0f172a;
+            --accent: #f59e0b; --bg: #f8fafc; --surface: #ffffff;
+            --text: #1e293b; --text-light: #64748b;
+            --danger: #ef4444; --success: #10b981;
+            --radius: 12px; --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
         }
-
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        body {
-            background: var(--bg);
-            color: var(--text);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
         /* Header */
         header {
-            background: var(--surface);
-            padding: 1rem 1.5rem;
-            box-shadow: var(--shadow);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 100;
+            background: var(--surface); padding: 1rem 1.5rem; box-shadow: var(--shadow);
+            display: flex; justify-content: space-between; align-items: center; z-index: 100;
         }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
+        .brand { display: flex; align-items: center; gap: 0.75rem; }
         .brand-logo {
-            width: 40px;
-            height: 40px;
-            background: var(--primary);
-            border-radius: 8px;
-            display: grid;
-            place-items: center;
-            color: white;
-            font-weight: bold;
-            font-size: 1.2rem;
+            width: 40px; height: 40px; background: var(--primary); border-radius: 8px;
+            display: grid; place-items: center; color: white; font-weight: bold; font-size: 1.2rem;
         }
-
-        .brand-text h1 {
-            font-size: 1rem;
-            font-weight: 700;
-            color: var(--secondary);
-        }
-
-        .brand-text span {
-            font-size: 0.75rem;
-            color: var(--text-light);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-
+        .brand-text h1 { font-size: 1rem; font-weight: 700; color: var(--secondary); }
+        .brand-text span { font-size: 0.75rem; color: var(--text-light); text-transform: uppercase; }
+        .header-actions { display: flex; gap: 0.5rem; }
+        
+        /* Buttons */
         .btn {
-            padding: 0.6rem 1rem;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
+            padding: 0.6rem 1rem; border-radius: 8px; border: none; cursor: pointer;
+            font-weight: 600; font-size: 0.9rem; transition: all 0.2s;
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
         }
-
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-primary:hover { background: var(--primary-dark); }
         .btn-secondary { background: #e2e8f0; color: var(--text); }
         .btn-secondary:hover { background: #cbd5e1; }
         .btn-danger { background: var(--danger); color: white; }
+        .btn-accent { background: var(--accent); color: white; }
         
         /* Main Layout */
         main {
-            flex: 1;
-            display: grid;
-            grid-template-columns: 320px 1fr 340px;
-            gap: 1rem;
-            padding: 1rem;
-            overflow: hidden;
+            flex: 1; display: grid; grid-template-columns: 320px 1fr 340px;
+            gap: 1rem; padding: 1rem; overflow: hidden;
         }
-
         @media (max-width: 1024px) {
             main { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; overflow-y: auto; }
             body { overflow: auto; }
         }
-
+        
         /* Panels */
         .panel {
-            background: var(--surface);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            height: 100%;
+            background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+            display: flex; flex-direction: column; overflow: hidden; height: 100%;
         }
-
         .panel-header {
-            padding: 1rem;
-            background: #f1f5f9;
-            border-bottom: 1px solid #e2e8f0;
-            font-weight: 700;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            padding: 1rem; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
+            font-weight: 700; display: flex; justify-content: space-between; align-items: center;
         }
-
-        .panel-content {
-            padding: 1rem;
-            overflow-y: auto;
-            flex: 1;
-        }
-
-        /* Canvas Container */
+        .panel-content { padding: 1rem; overflow-y: auto; flex: 1; }
+        
+        /* Canvas */
         #canvas-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            background: #eef2f6;
-            border-radius: var(--radius);
-            overflow: hidden;
+            position: relative; width: 100%; height: 100%;
+            background: #eef2f6; border-radius: var(--radius); overflow: hidden;
         }
-
         canvas { display: block; width: 100%; height: 100%; outline: none; }
-
-        /* HUD Overlay */
+        
+        /* HUD */
         #hud {
-            position: absolute;
-            top: 1rem;
-            left: 1rem;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 0.75rem;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            pointer-events: none;
-            backdrop-filter: blur(4px);
+            position: absolute; top: 1rem; left: 1rem;
+            background: rgba(255, 255, 255, 0.95); padding: 0.75rem;
+            border-radius: 8px; font-size: 0.85rem; pointer-events: none; backdrop-filter: blur(4px);
         }
-
         #hud .row { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
         #hud .label { color: var(--text-light); }
         #hud .value { font-weight: 600; color: var(--secondary); }
-
-        /* Assistant IA */
+        
+        /* AI Section */
         .ai-section { margin-bottom: 1.5rem; }
         .ai-box {
             background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-            border: 1px solid #bfdbfe;
-            border-radius: 10px;
-            padding: 1rem;
-            margin-bottom: 1rem;
+            border: 1px solid #bfdbfe; border-radius: 10px; padding: 1rem; margin-bottom: 1rem;
         }
         .ai-title {
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: var(--primary-dark);
-            margin-bottom: 0.75rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-size: 0.9rem; font-weight: 700; color: var(--primary-dark);
+            margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
         }
+        .ai-input-group { margin-bottom: 0.75rem; }
+        .ai-input {
+            width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px;
+            font-size: 0.9rem; resize: vertical; min-height: 60px;
+        }
+        .ai-input:focus { border-color: var(--primary); outline: none; }
         .ai-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
         .ai-btn {
-            background: white;
-            border: 1px solid #cbd5e1;
-            padding: 0.6rem;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.4rem;
+            background: white; border: 1px solid #cbd5e1; padding: 0.6rem;
+            border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 0.4rem;
         }
         .ai-btn:hover { border-color: var(--primary); color: var(--primary); }
-        .ai-btn.full { grid-column: span 2; }
+        .ai-btn.full { grid-column: span 2; background: var(--primary); color: white; border: none; }
+        .ai-btn.full:hover { background: var(--primary-dark); color: white; }
+        .ai-btn.recording { background: var(--danger); color: white; border-color: var(--danger); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         
-        /* Module List */
+        /* Modules */
         .module-list { display: flex; flex-direction: column; gap: 0.75rem; }
         .module-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 0.75rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            position: relative;
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+            padding: 0.75rem; cursor: pointer; transition: all 0.2s; position: relative;
         }
         .module-card:hover { border-color: var(--primary); transform: translateY(-2px); }
         .module-card.selected { border-color: var(--accent); background: #fffbeb; }
         .module-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem; }
         .module-meta { font-size: 0.75rem; color: var(--text-light); }
         .module-oracle {
-            margin-top: 0.5rem;
-            font-size: 0.7rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            display: inline-block;
+            margin-top: 0.5rem; font-size: 0.7rem; padding: 0.25rem 0.5rem;
+            border-radius: 4px; display: inline-block;
         }
         .oracle-ok { background: #d1fae5; color: #065f46; }
-        .oracle-warn { background: #fef3c7; color: #92400e; }
         .oracle-err { background: #fee2e2; color: #991b1b; }
-
-        .btn-add {
-            width: 100%;
-            margin-top: 0.5rem;
-            background: var(--secondary);
-            color: white;
-        }
-
+        .btn-add { width: 100%; margin-top: 0.5rem; background: var(--secondary); color: white; }
+        
         /* AR / Cam */
         .ar-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
         .ar-status {
-            background: #f1f5f9;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            margin-bottom: 1rem;
+            background: #f1f5f9; padding: 0.75rem; border-radius: 6px;
+            font-size: 0.8rem; margin-bottom: 1rem;
         }
         .file-input {
-            width: 100%;
-            padding: 0.6rem;
-            border: 1px dashed #cbd5e1;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
+            width: 100%; padding: 0.6rem; border: 1px dashed #cbd5e1;
+            border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.5rem; cursor: pointer;
         }
-
+        
         /* Costs */
         .cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
         .input-group { display: flex; flex-direction: column; gap: 0.25rem; }
         .input-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-light); }
         .input-group input {
-            padding: 0.6rem;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 0.9rem;
+            padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem;
         }
         .input-group input:focus { border-color: var(--primary); outline: none; }
-        
         .bom-result {
-            background: var(--secondary);
-            color: white;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-top: 1rem;
+            background: var(--secondary); color: white; padding: 1rem; border-radius: 8px; margin-top: 1rem;
         }
         .bom-label { font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.25rem; }
         .bom-value { font-size: 1.5rem; font-weight: 700; }
         .bom-breakdown {
-            margin-top: 0.75rem;
-            padding-top: 0.75rem;
-            border-top: 1px solid rgba(255,255,255,0.2);
-            font-size: 0.8rem;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.5rem;
+            margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.2);
+            font-size: 0.8rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
         }
-
-        /* API Settings Modal */
+        
+        /* Modal */
         .modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.5);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 1rem;
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            display: none; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
         }
         .modal.active { display: flex; }
         .modal-content {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3);
+            background: var(--surface); border-radius: var(--radius); padding: 1.5rem;
+            width: 100%; max-width: 400px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3);
         }
-        .modal-header {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-        }
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-            margin-top: 1.5rem;
-        }
-
+        .modal-header { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
+        
         /* Notifications */
         #notifications {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            z-index: 2000;
+            position: fixed; bottom: 1rem; right: 1rem;
+            display: flex; flex-direction: column; gap: 0.5rem; z-index: 2000;
         }
         .toast {
-            background: var(--surface);
-            padding: 1rem;
-            border-radius: 8px;
+            background: var(--surface); padding: 1rem; border-radius: 8px;
             box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
-            border-left: 4px solid var(--primary);
-            min-width: 280px;
+            border-left: 4px solid var(--primary); min-width: 280px;
             animation: slideIn 0.3s ease;
         }
         .toast.error { border-left-color: var(--danger); }
         .toast.success { border-left-color: var(--success); }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-
-        /* Helpers */
+        
         .hidden { display: none !important; }
         .text-xs { font-size: 0.75rem; }
-        .text-sm { font-size: 0.875rem; }
-        .font-bold { font-weight: 700; }
         .mt-2 { margin-top: 0.5rem; }
-        .mb-2 { margin-bottom: 0.5rem; }
     </style>
 </head>
 <body>
 
-    <!-- Header -->
     <header>
         <div class="brand">
             <div class="brand-logo">th</div>
@@ -368,18 +206,13 @@
             </div>
         </div>
         <div class="header-actions">
-            <button class="btn btn-secondary" onclick="App.ui.toggleModal('api-modal')">
-                ⚙️ API Settings
-            </button>
-            <button class="btn btn-primary" onclick="App.project.export()">
-                💾 Salvar Projeto
-            </button>
+            <button class="btn btn-secondary" onclick="App.ui.toggleModal('api-modal')">⚙️ API Settings</button>
+            <button class="btn btn-primary" onclick="App.project.export()">💾 Salvar Projeto</button>
         </div>
     </header>
 
-    <!-- Main -->
     <main>
-        <!-- Left Panel: Assistant & Modules -->
+        <!-- Left Panel -->
         <aside class="panel">
             <div class="panel-header">
                 <span>Assistente & Módulos</span>
@@ -389,15 +222,23 @@
                 <div class="ai-section">
                     <div class="ai-box">
                         <div class="ai-title">✨ Inteligência Artificial thIAguinho</div>
+                        
+                        <!-- Campo de Texto Adicionado -->
+                        <div class="ai-input-group">
+                            <textarea id="ai-prompt" class="ai-input" placeholder="Digite sua solicitação ou descreva o móvel..."></textarea>
+                        </div>
+                        
                         <div class="ai-controls">
-                            <button class="ai-btn" onclick="App.ai.recordVoice()">🎤 Gravar Voz</button>
-                            <button class="ai-btn" onclick="App.ai.sendAudio()">📤 Enviar Áudio</button>
+                            <button id="btn-record" class="ai-btn" onclick="App.ai.toggleRecord()">🎤 Gravar Voz</button>
+                            <button id="btn-send-audio" class="ai-btn" onclick="App.ai.sendAudio()" disabled>📤 Enviar Áudio</button>
+                            <button class="ai-btn" onclick="App.ai.sendText()">📝 Enviar Texto</button>
+                            <button class="ai-btn" onclick="App.ai.generateImage()">🖼️ Gerar Imagem</button>
                             <button class="ai-btn full" onclick="document.getElementById('photo-input').click()">
                                 📷 Foto da Parede / Ambiente
                             </button>
                         </div>
                         <input type="file" id="photo-input" class="hidden" accept="image/*" onchange="App.ai.processPhoto(this)">
-                        <div class="text-xs text-light mt-2">Gerar Marcenaria de Precisão a partir de contexto visual ou voz.</div>
+                        <div class="text-xs text-light mt-2">Gerar Marcenaria de Precisão a partir de contexto visual, voz ou texto.</div>
                     </div>
                 </div>
 
@@ -409,13 +250,11 @@
                     <!-- Modules injected by JS -->
                 </div>
 
-                <button class="btn btn-add" onclick="App.modules.addGeneric()">
-                    ➕ Novo Módulo Avulso
-                </button>
+                <button class="btn btn-add" onclick="App.modules.addGeneric()">➕ Novo Módulo Avulso</button>
             </div>
         </aside>
 
-        <!-- Center: 3D Canvas -->
+        <!-- Center: Canvas -->
         <section id="canvas-container">
             <canvas id="cad-canvas"></canvas>
             <div id="hud">
@@ -423,8 +262,6 @@
                 <div class="row"><span class="label">Objetos:</span><span class="value" id="hud-objects">0</span></div>
                 <div class="row"><span class="label">Seleção:</span><span class="value" id="hud-selection">Nenhum</span></div>
             </div>
-            
-            <!-- AR Overlay Elements -->
             <div id="ar-overlay" class="hidden" style="position:absolute; inset:0; pointer-events:none; border: 2px dashed var(--accent);">
                 <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.7); color:white; padding:0.5rem 1rem; border-radius:4px;">
                     Modo AR: Aponte para superfície plana
@@ -432,17 +269,14 @@
             </div>
         </section>
 
-        <!-- Right Panel: AR & Costs -->
+        <!-- Right Panel -->
         <aside class="panel">
             <div class="panel-header">
                 <span>AR / Cam & Custos</span>
             </div>
             <div class="panel-content">
-                <!-- AR Controls -->
                 <div class="mb-2 font-bold text-sm">Realidade Aumentada (AR) e Câmera</div>
-                <div class="ar-status" id="ar-status">
-                    Status: Câmera inativa. Carregue foto ou ative AR.
-                </div>
+                <div class="ar-status" id="ar-status">Status: Câmera inativa. Carregue foto ou ative AR.</div>
                 
                 <div class="ar-controls">
                     <button class="btn btn-secondary text-xs" onclick="App.ar.toggle()">📱 Projetar na Foto (AR)</button>
@@ -453,7 +287,6 @@
 
                 <hr style="border:0; border-top:1px solid #e2e8f0; margin: 1rem 0;">
 
-                <!-- Costs -->
                 <div class="mb-2 font-bold text-sm">Custos e Orçamento (BOM)</div>
                 
                 <div class="cost-grid">
@@ -512,10 +345,8 @@
         </div>
     </div>
 
-    <!-- Notifications -->
     <div id="notifications"></div>
 
-    <!-- Application Logic -->
     <script src="app.js"></script>
 </body>
 </html>
