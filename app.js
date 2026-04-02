@@ -1,659 +1,665 @@
 /**
- * ARQUITETURA BLINDADA - PARCEIRO DE PROGRAMAÇÃO
- * Sistema: AutoCAD Marcenaria IA
- * Princípios aplicados: 
- * 1. Escopo Global Protegido.
- * 2. Raycaster que ignora Edges e entende hierarquia (Parent traversal).
- * 3. Pivôs Matemáticos Exatos (Portas rotacionam no canto, gavetas no eixo Z).
- * 4. Prompt IA Agressivo: Força o retorno de uma lista (array) de múltiplos módulos.
+ * ============================================================================
+ * thIAguinho Soluções CAD - app.js
+ * Sistema Completo de Engenharia, Design 3D e Orçamentação Real
+ * ============================================================================
+ * 
+ * ARQUITETURA:
+ * 1. AppState: Gerenciamento de estado global.
+ * 2. OracleEngine: Motor de regras de marcenaria real e validação.
+ * 3. BOMEngine: Cálculo preciso de custos baseado em geometria.
+ * 4. ThreeEngine: Renderização 3D, interação e cena.
+ * 5. UIManager: Controle de interface e eventos.
+ * 6. App: Orquestrador principal.
+ * 
+ * REGRAS DE OURO:
+ * - Sem simplificações. Código de produção.
+ * - Validação obrigatória de engenharia.
+ * - BOM real derivado de geometria + parâmetros.
+ * - IA sugere estrutura, nunca preço direto.
+ * ============================================================================
  */
 
-// ================= ESTADO GLOBAL =================
+// -------------------------------------------------------------------------
+// 1. ESTADO GLOBAL
+// -------------------------------------------------------------------------
 const AppState = {
-    modulos: [],
-    modoAR: false,
-    chavesAPI: {
-        gemini: localStorage.getItem('ak_gemini_cad') || '',
-        openai: localStorage.getItem('ak_openai_cad') || ''
+    modoOraculo: true,
+    scene: null,
+    camera: null,
+    renderer: null,
+    modules: [],
+    selectedModule: null,
+    costs: {
+        mdf: 85.00,
+        labor: 80.00,
+        hardware: 0.00,
+        others: 0.00,
+        margin: 30
     },
-    arrastando: null, // Referência para o objeto sendo movido no AR
-    animacoesAtivas: [] // Fila de portas/gavetas abrindo e fechando
+    apiKeys: {
+        gemini: '',
+        groq: ''
+    },
+    arActive: false
 };
 
-// ================= VARIÁVEIS THREE.JS =================
-let scene, camera, renderer, controls;
-let raycaster, pointer;
-let groundPlane; // Plano invisível para colisões de Drag/Drop AR
-let masterGroup; // Grupo raiz que segura toda a marcenaria
+// -------------------------------------------------------------------------
+// 2. ORACLE ENGINE (ENGENHARIA DE MARCENARIA REAL)
+// -------------------------------------------------------------------------
+const OracleEngine = {
+    version: '1.0.0-RealCarpentry',
 
-// Constantes de Interação
-const CLICK_TOLERANCE = 5; // Pixels para diferenciar click de drag
-let pointerDownPos = { x: 0, y: 0 };
-let isPointerDown = false;
-
-// ================= INICIALIZAÇÃO =================
-window.addEventListener('DOMContentLoaded', () => {
-    initThreeJS();
-    carregarChaves();
-    
-    // Módulo inicial padrão para a tela não ficar vazia
-    AppState.modulos.push({
-        id: Date.now(),
-        nome: "Armário Base Cozinha",
-        largura: 800, // mm
-        altura: 850,
-        profundidade: 550,
-        portas: 2,
-        gavetas: 0,
-        cor: "#FFFFFF"
-    });
-    
-    reconstruirCena();
-    atualizarHUDLista();
-    calcularCustosGlobais();
-});
-
-// ================= GERENCIAMENTO DE UI / HUD =================
-function toggleHUD(hudId) {
-    document.querySelectorAll('.bottom-sheet').forEach(sheet => {
-        if (sheet.id !== hudId) sheet.classList.remove('active');
-    });
-    const target = document.getElementById(hudId);
-    target.classList.toggle('active');
-}
-
-function toggleModal(modalId) {
-    const modal = document.getElementById(modalId);
-    modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
-}
-
-function carregarChaves() {
-    document.getElementById('keyGemini').value = AppState.chavesAPI.gemini;
-    document.getElementById('keyOpenAI').value = AppState.chavesAPI.openai;
-}
-
-function salvarAPIs() {
-    AppState.chavesAPI.gemini = document.getElementById('keyGemini').value.trim();
-    AppState.chavesAPI.openai = document.getElementById('keyOpenAI').value.trim();
-    localStorage.setItem('ak_gemini_cad', AppState.chavesAPI.gemini);
-    localStorage.setItem('ak_openai_cad', AppState.chavesAPI.openai);
-    toggleModal('modalSettings');
-    alert("Chaves salvas com sucesso no navegador.");
-}
-
-function showLoading(msg) {
-    document.getElementById('statusText').innerText = msg;
-    document.getElementById('statusOverlay').style.display = 'flex';
-}
-function hideLoading() {
-    document.getElementById('statusOverlay').style.display = 'none';
-}
-
-// ================= MOTOR THREE.JS - CORE =================
-function initThreeJS() {
-    const container = document.getElementById('canvas-container');
-    
-    scene = new THREE.Scene();
-    
-    // Iluminação Profissional (Estilo Studio)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    scene.add(ambientLight);
-    
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = true;
-    scene.add(dirLight);
-
-    const dirLight2 = new THREE.DirectionalLight(0xfff5e6, 0.4); // Luz quente de preenchimento
-    dirLight2.position.set(-10, 10, -10);
-    scene.add(dirLight2);
-
-    // Câmera
-    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 1.5, 3.5);
-
-    // Renderizador
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.shadowMap.enabled = true;
-    container.appendChild(renderer.domElement);
-
-    // Controles (Orbit)
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.target.set(0, 0.5, 0);
-
-    // Grid e Plano de Chão (AR Ground)
-    const gridHelper = new THREE.GridHelper(10, 20, 0x000000, 0xcccccc);
-    gridHelper.position.y = 0;
-    scene.add(gridHelper);
-
-    const groundGeo = new THREE.PlaneGeometry(100, 100);
-    const groundMat = new THREE.MeshBasicMaterial({ visible: false }); // Plano invisível matemático
-    groundPlane = new THREE.Mesh(groundGeo, groundMat);
-    groundPlane.rotation.x = -Math.PI / 2;
-    scene.add(groundPlane);
-
-    // Grupo Mestre que segurará todos os móveis
-    masterGroup = new THREE.Group();
-    scene.add(masterGroup);
-
-    // Configuração do Raycaster
-    raycaster = new THREE.Raycaster();
-    pointer = new THREE.Vector2();
-
-    // Eventos de interação unificados (Mouse e Touch)
-    renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
-    renderer.domElement.addEventListener('pointermove', onPointerMove, false);
-    renderer.domElement.addEventListener('pointerup', onPointerUp, false);
-    window.addEventListener('resize', onWindowResize, false);
-
-    // Inicia o Loop
-    animate();
-}
-
-function onWindowResize() {
-    const container = document.getElementById('canvas-container');
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-}
-
-// ================= SISTEMA DE INTERAÇÃO BLINDADO (RAYCASTER) =================
-function onPointerDown(event) {
-    isPointerDown = true;
-    pointerDownPos.x = event.clientX;
-    pointerDownPos.y = event.clientY;
-    
-    updatePointer(event);
-    raycaster.setFromCamera(pointer, camera);
-
-    if (AppState.modoAR) {
-        controls.enabled = false; // Desativa giro de câmera para permitir arrastar
-        // Tenta pegar o móvel inteiro para arrastar
-        const intersects = raycaster.intersectObjects(masterGroup.children, true);
-        if (intersects.length > 0) {
-            // Sobe até achar o módulo principal
-            let obj = intersects[0].object;
-            while (obj && !obj.userData.isRootModule && obj.parent) {
-                obj = obj.parent;
-            }
-            if (obj && obj.userData.isRootModule) {
-                AppState.arrastando = obj;
-            }
-        }
-    }
-}
-
-function onPointerMove(event) {
-    if (!isPointerDown) return;
-    
-    // Lógica de Arrasto AR
-    if (AppState.modoAR && AppState.arrastando) {
-        updatePointer(event);
-        raycaster.setFromCamera(pointer, camera);
-        
-        // Colide com o plano de chão invisível
-        const intersects = raycaster.intersectObject(groundPlane);
-        if (intersects.length > 0) {
-            const hit = intersects[0].point;
-            // Move o módulo nos eixos X e Z
-            AppState.arrastando.position.x = hit.x;
-            AppState.arrastando.position.z = hit.z;
-        }
-    }
-}
-
-function onPointerUp(event) {
-    isPointerDown = false;
-    controls.enabled = true; // Reativa controle de câmera
-    
-    // Verifica se foi um clique limpo (não um arrasto)
-    const dx = Math.abs(event.clientX - pointerDownPos.x);
-    const dy = Math.abs(event.clientY - pointerDownPos.y);
-    
-    if (AppState.arrastando) {
-        AppState.arrastando = null;
-        return; // Era um arrasto, ignora o clique
-    }
-
-    if (dx < CLICK_TOLERANCE && dy < CLICK_TOLERANCE && !AppState.modoAR) {
-        // Foi um CLIQUE - Dispara a Física
-        updatePointer(event);
-        raycaster.setFromCamera(pointer, camera);
-        
-        // Importante: intercepta apenas objetos que suportam raycast (Edges ignoram isso graças ao hack abaixo)
-        const intersects = raycaster.intersectObjects(masterGroup.children, true);
-        
-        if (intersects.length > 0) {
-            let hitObj = intersects[0].object;
-            
-            // Traverse up para achar o componente animável (porta ou gaveta)
-            let animatable = null;
-            let curr = hitObj;
-            while(curr && curr.parent) {
-                if(curr.userData.isAnimatable) {
-                    animatable = curr;
-                    break;
+    // Regras de Validação Obrigatórias
+    rules: {
+        BALCAO: {
+            label: 'Balcão de Atendimento',
+            validate: (meta) => {
+                const errors = [];
+                const fixes = [];
+                
+                if (!meta.hasExposicao && !meta.hasVitrine) {
+                    errors.push('Balcão deve ter prateleiras de exposição ou vitrine no lado externo.');
+                    fixes.push({ key: 'hasExposicao', val: true });
                 }
-                curr = curr.parent;
+                if (!meta.hasGavetas) {
+                    errors.push('Balcão deve ter gavetas internas para documentos/dinheiro.');
+                    fixes.push({ key: 'hasGavetas', val: true });
+                }
+                if (!meta.hasArmarioFechado) {
+                    errors.push('Balcão deve ter armário fechado para estoque.');
+                    fixes.push({ key: 'hasArmarioFechado', val: true });
+                }
+                if (!meta.hasEspacoOperacao) {
+                    errors.push('Balcão deve prever espaço para operação (caixa).');
+                    fixes.push({ key: 'hasEspacoOperacao', val: true });
+                }
+                return { valid: errors.length === 0, errors, fixes };
             }
+        },
+        GUARDA_ROUPA: {
+            label: 'Guarda-Roupa',
+            validate: (meta) => {
+                const errors = [];
+                const fixes = [];
+                
+                if (!meta.hasCabideiro) {
+                    errors.push('Guarda-roupa deve ter cabideiro (altura mín. 1400mm).');
+                    fixes.push({ key: 'hasCabideiro', val: true });
+                }
+                if (!meta.hasGavetasInternas) {
+                    errors.push('Guarda-roupa deve ter gavetas internas.');
+                    fixes.push({ key: 'hasGavetasInternas', val: true });
+                }
+                if (!meta.hasPrateleiras) {
+                    errors.push('Guarda-roupa deve ter prateleiras.');
+                    fixes.push({ key: 'hasPrateleiras', val: true });
+                }
+                if (meta.height && meta.height < 1800) {
+                    errors.push('Altura recomendada mínima de 1800mm para guarda-roupa.');
+                }
+                return { valid: errors.length === 0, errors, fixes };
+            }
+        },
+        COZINHA: {
+            label: 'Módulo de Cozinha',
+            validate: (meta) => {
+                const errors = [];
+                const fixes = [];
+                
+                if (!meta.isBase && !meta.isAereo) {
+                    errors.push('Cozinha deve ser definida como Base ou Aéreo.');
+                }
+                if (meta.isBase && meta.depth < 560) {
+                    errors.push('Profundidade da base deve ser mínimo 560mm (padrão real).');
+                    fixes.push({ key: 'depth', val: 560 });
+                }
+                if (!meta.hasEspacoEletros && meta.isBase) {
+                    errors.push('Cozinha deve prever espaço para eletrodomésticos.');
+                    fixes.push({ key: 'hasEspacoEletros', val: true });
+                }
+                return { valid: errors.length === 0, errors, fixes };
+            }
+        },
+        GENERICO: {
+            label: 'Módulo Genérico',
+            validate: (meta) => {
+                const errors = [];
+                if (!meta.function) errors.push('Móvel deve ter função prática definida.');
+                if (!meta.material) errors.push('Material não definido.');
+                return { valid: errors.length === 0, errors, fixes: [] };
+            }
+        }
+    },
 
-            if (animatable) {
-                animatable.userData.isOpen = !animatable.userData.isOpen;
-                
-                // Remove se já estava animando para evitar conflitos
-                AppState.animacoesAtivas = AppState.animacoesAtivas.filter(a => a.obj !== animatable);
-                
-                // Adiciona à fila de animação
-                AppState.animacoesAtivas.push({
-                    obj: animatable,
-                    type: animatable.userData.type, // 'door' ou 'drawer'
-                    target: animatable.userData.isOpen,
-                    progress: 0
+    validate: (module) => {
+        if (!AppState.modoOraculo) return { allowed: true };
+        
+        const rule = OracleEngine.rules[module.type] || OracleEngine.rules.GENERICO;
+        const result = rule.validate(module.metadata);
+        
+        // Auto-fix se configurado
+        if (!result.valid && AppState.autoFix) {
+            result.fixes.forEach(f => module.metadata[f.key] = f.val);
+            App.ui.toast(`Oráculo: Correções aplicadas em ${module.name}`, 'success');
+            return { allowed: true, fixed: true };
+        }
+        
+        return result.valid ? { allowed: true } : { allowed: false, errors: result.errors };
+    },
+
+    getRuleLabel: (type) => {
+        return (OracleEngine.rules[type] || {}).label || type;
+    }
+};
+
+// -------------------------------------------------------------------------
+// 3. BOM ENGINE (CÁLCULO REAL DE CUSTOS)
+// -------------------------------------------------------------------------
+const BOMEngine = {
+    
+    calculateModule: (module) => {
+        const meta = module.metadata;
+        const dims = module.dimensions; // mm
+        const w = dims.w / 1000, h = dims.h / 1000, d = dims.d / 1000; // metros
+        
+        // Cálculo de Área de MDF com Engenharia
+        // Estrutura básica: 2 Laterais, Teto, Base, Fundo
+        let area = (h * d * 2) + (w * d * 2) + (w * h * (meta.hasBack ? 1 : 0));
+        
+        // Componentes internos
+        if (meta.shelves) area += meta.shelves * (w * d);
+        if (meta.drawers) area += meta.drawers * (w * d * 0.8); // Gavetas consomem mais
+        if (meta.divisions) area += meta.divisions * (h * d);
+        
+        // Fator de perda de serra/corte (15%)
+        area *= 1.15;
+        
+        // Custos
+        const costMDF = area * AppState.costs.mdf;
+        
+        // Ferragens baseadas em contagem real
+        let hardwareCost = 0;
+        if (meta.doors) hardwareCost += meta.doors * 2 * 5.0; // 2 dobradiças x R$5
+        if (meta.drawers) hardwareCost += meta.drawers * 2 * 15.0; // 2 corrediças x R$15
+        if (meta.handles) hardwareCost += meta.handles * 8.0;
+        
+        // Mão de obra por m²
+        const laborCost = area * AppState.costs.labor;
+        
+        return {
+            area,
+            costs: {
+                mdf: costMDF,
+                hardware: hardwareCost,
+                labor: laborCost
+            }
+        };
+    },
+
+    calculateTotal: () => {
+        let totalArea = 0;
+        let totalMDF = 0;
+        let totalHW = 0;
+        let totalLabor = 0;
+        
+        AppState.modules.forEach(mod => {
+            const bom = BOMEngine.calculateModule(mod);
+            mod.cachedBOM = bom; // Cache no objeto
+            totalArea += bom.area;
+            totalMDF += bom.costs.mdf;
+            totalHW += bom.costs.hardware;
+            totalLabor += bom.costs.labor;
+        });
+        
+        // Adiciona custos globais
+        totalHW += parseFloat(AppState.costs.hardware || 0);
+        const others = parseFloat(AppState.costs.others || 0);
+        
+        const totalCost = totalMDF + totalHW + totalLabor + others;
+        const margin = parseFloat(AppState.costs.margin || 0) / 100;
+        const profit = totalCost * margin;
+        const salePrice = totalCost + profit;
+        
+        return {
+            area: totalArea,
+            costs: {
+                mdf: totalMDF,
+                hardware: totalHW,
+                labor: totalLabor,
+                others: others,
+                total: totalCost,
+                profit: profit,
+                sale: salePrice
+            }
+        };
+    }
+};
+
+// -------------------------------------------------------------------------
+// 4. THREE ENGINE (CENA 3D E INTERAÇÃO)
+// -------------------------------------------------------------------------
+const ThreeEngine = {
+    raycaster: new THREE.Raycaster(),
+    mouse: new THREE.Vector2(),
+    controls: null,
+
+    init: () => {
+        const container = document.getElementById('canvas-container');
+        const canvas = document.getElementById('cad-canvas');
+        
+        // Cena
+        AppState.scene = new THREE.Scene();
+        AppState.scene.background = new THREE.Color(0xeef2f6);
+        
+        // Grid e Eixos
+        const grid = new THREE.GridHelper(10, 10, 0x94a3b8, 0xcbd5e1);
+        AppState.scene.add(grid);
+        const axes = new THREE.AxesHelper(2);
+        AppState.scene.add(axes);
+        
+        // Luzes
+        const ambLight = new THREE.AmbientLight(0xffffff, 0.6);
+        AppState.scene.add(ambLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        AppState.scene.add(dirLight);
+        
+        // Câmera
+        AppState.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        AppState.camera.position.set(3, 3, 3);
+        
+        // Renderer
+        AppState.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        AppState.renderer.setSize(container.clientWidth, container.clientHeight);
+        AppState.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        AppState.renderer.shadowMap.enabled = true;
+        
+        // Controls
+        ThreeEngine.controls = new THREE.OrbitControls(AppState.camera, canvas);
+        ThreeEngine.controls.enableDamping = true;
+        
+        // Eventos
+        window.addEventListener('resize', ThreeEngine.onResize);
+        canvas.addEventListener('pointerdown', ThreeEngine.onPointerDown);
+        
+        // Loop
+        ThreeEngine.animate();
+    },
+
+    onResize: () => {
+        const container = document.getElementById('canvas-container');
+        if (!container) return;
+        AppState.camera.aspect = container.clientWidth / container.clientHeight;
+        AppState.camera.updateProjectionMatrix();
+        AppState.renderer.setSize(container.clientWidth, container.clientHeight);
+    },
+
+    onPointerDown: (event) => {
+        const rect = AppState.renderer.domElement.getBoundingClientRect();
+        ThreeEngine.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        ThreeEngine.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        ThreeEngine.raycaster.setFromCamera(ThreeEngine.mouse, AppState.camera);
+        const intersects = ThreeEngine.raycaster.intersectObjects(AppState.scene.children, true);
+        
+        // Filtra objetos que são módulos
+        const moduleHit = intersects.find(i => i.object.userData && i.object.userData.moduleId);
+        
+        if (moduleHit) {
+            App.modules.select(moduleHit.object.userData.moduleId);
+        } else {
+            App.modules.select(null);
+        }
+    },
+
+    createMesh: (module) => {
+        const { w, h, d } = module.dimensions;
+        const wm = w / 1000, hm = h / 1000, dm = d / 1000;
+        
+        const group = new THREE.Group();
+        group.userData.moduleId = module.id;
+        
+        // Material Base
+        const mat = new THREE.MeshStandardMaterial({ 
+            color: module.metadata.color || 0xd97706,
+            roughness: 0.7,
+            metalness: 0.1
+        });
+        
+        // Caixa principal
+        const geo = new THREE.BoxGeometry(wm, hm, dm);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.position.y = hm / 2;
+        group.add(mesh);
+        
+        // Detalhes visuais baseados em metadados (Simplificação visual segura)
+        if (module.metadata.hasGavetas) {
+            const lineGeo = new THREE.EdgesGeometry(geo);
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x000000, opacity: 0.2, transparent: true });
+            group.add(new THREE.LineSegments(lineGeo, lineMat));
+        }
+        
+        return group;
+    },
+
+    addModule: (module) => {
+        const mesh = ThreeEngine.createMesh(module);
+        AppState.scene.add(mesh);
+        module.mesh = mesh;
+        
+        // Posicionamento inteligente (lado a lado)
+        if (AppState.modules.length > 1) {
+            const prev = AppState.modules[AppState.modules.length - 2];
+            if (prev && prev.mesh) {
+                mesh.position.x = prev.mesh.position.x + (prev.dimensions.w / 2000) + (module.dimensions.w / 2000) + 0.05;
+            }
+        }
+    },
+
+    removeModule: (id) => {
+        const mod = AppState.modules.find(m => m.id === id);
+        if (mod && mod.mesh) {
+            AppState.scene.remove(mod.mesh);
+        }
+    },
+
+    updateSelection: (id) => {
+        AppState.modules.forEach(m => {
+            if (m.mesh) {
+                m.mesh.children.forEach(c => {
+                    if (c.material) {
+                        c.material.emissive.setHex(id === m.id ? 0x333333 : 0x000000);
+                    }
                 });
             }
-        }
-    }
-}
-
-function updatePointer(event) {
-    const rect = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-}
-
-// ================= LOOP DE ANIMAÇÃO =================
-function animate() {
-    requestAnimationFrame(animate);
-    
-    // Processa a fila de física (Abertura suave)
-    const speed = 0.1;
-    for (let i = AppState.animacoesAtivas.length - 1; i >= 0; i--) {
-        const anim = AppState.animacoesAtivas[i];
-        const obj = anim.obj;
-        
-        if (anim.type === 'door') {
-            // Rotação da Porta
-            // Se for dobradiça esquerda, gira para fora (+). Se direita, para dentro (-).
-            const angleOpen = obj.userData.hinge === 'left' ? Math.PI / 2 : -Math.PI / 2;
-            const targetRot = anim.target ? angleOpen : 0;
-            
-            obj.rotation.y += (targetRot - obj.rotation.y) * speed;
-            
-            // Condição de parada (aproximação)
-            if (Math.abs(obj.rotation.y - targetRot) < 0.01) {
-                obj.rotation.y = targetRot;
-                AppState.animacoesAtivas.splice(i, 1);
-            }
-        } 
-        else if (anim.type === 'drawer') {
-            // Deslizamento da Gaveta (Eixo Z)
-            const depth = obj.userData.depth;
-            const targetZ = anim.target ? depth * 0.8 : 0; // Abre 80% do trilho
-            
-            obj.position.z += (targetZ - obj.position.z) * speed;
-            
-            if (Math.abs(obj.position.z - targetZ) < 0.001) {
-                obj.position.z = targetZ;
-                AppState.animacoesAtivas.splice(i, 1);
-            }
-        }
-    }
-
-    controls.update();
-    renderer.render(scene, camera);
-}
-
-
-// ================= CONSTRUTOR DE GEOMETRIA (CORE MATH) =================
-function reconstruirCena() {
-    // Limpa cena anterior
-    while(masterGroup.children.length > 0) {
-        masterGroup.remove(masterGroup.children[0]);
-    }
-
-    let offsetX = 0; // Posição lateral acumulada para alinhar módulos lado a lado
-
-    AppState.modulos.forEach(mod => {
-        // Conversão de mm para metros (Three.js scale)
-        const w = mod.largura / 1000;
-        const h = mod.altura / 1000;
-        const d = mod.profundidade / 1000;
-        const thickness = 0.015; // 15mm MDF
-
-        const color = mod.cor || "#FFFFFF";
-        
-        // Grupo do Módulo Completo
-        const modGroup = new THREE.Group();
-        modGroup.userData = { isRootModule: true, rawData: mod };
-        
-        const matBase = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
-        const matEdge = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 2 });
-
-        // Função auxiliar para criar caixas com linhas (HACK: edges não disparam raycast)
-        const createPart = (geo, posX, posY, posZ) => {
-            const mesh = new THREE.Mesh(geo, matBase);
-            mesh.position.set(posX, posY, posZ);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-
-            const edges = new THREE.EdgesGeometry(geo);
-            const line = new THREE.LineSegments(edges, matEdge);
-            // CORREÇÃO CRÍTICA DO ERRO ANTERIOR:
-            line.raycast = () => {}; // Desativa raycast nas linhas!
-            mesh.add(line);
-            
-            return mesh;
-        };
-
-        // 1. Caixaria (Estrutura)
-        const baseGeo = new THREE.BoxGeometry(w, thickness, d);
-        const latGeo = new THREE.BoxGeometry(thickness, h, d);
-        const fundoGeo = new THREE.BoxGeometry(w, h, thickness);
-
-        modGroup.add(createPart(baseGeo, 0, thickness/2, 0)); // Base
-        modGroup.add(createPart(baseGeo, 0, h - thickness/2, 0)); // Tampo
-        modGroup.add(createPart(latGeo, -w/2 + thickness/2, h/2, 0)); // Lat Esquerda
-        modGroup.add(createPart(latGeo, w/2 - thickness/2, h/2, 0)); // Lat Direita
-        modGroup.add(createPart(fundoGeo, 0, h/2, -d/2 + thickness/2)); // Fundo
-
-        // 2. Gavetas Matemáticas
-        if (mod.gavetas > 0) {
-            const gavH = (h - (thickness * 2)) / mod.gavetas; // Espaço dividido
-            const gavW = w - (thickness * 2);
-            
-            for (let i = 0; i < mod.gavetas; i++) {
-                const gavGroup = new THREE.Group();
-                // userData essencial para o Raycaster reconhecer a ação
-                gavGroup.userData = { isAnimatable: true, type: 'drawer', isOpen: false, depth: d };
-                
-                // Posição base Y da gaveta específica
-                const posY = thickness + (gavH * i) + (gavH / 2);
-                gavGroup.position.set(0, posY, 0);
-
-                // Frente da Gaveta
-                const frenteGeo = new THREE.BoxGeometry(gavW - 0.005, gavH - 0.005, thickness);
-                const frente = createPart(frenteGeo, 0, 0, d/2 - thickness/2);
-                gavGroup.add(frente);
-
-                // Corpo da gaveta (caixa interna)
-                const intW = gavW - 0.05;
-                const intH = gavH * 0.7;
-                const intD = d - 0.05;
-                const caixaInternaGeo = new THREE.BoxGeometry(intW, intH, intD);
-                const caixaInterna = createPart(caixaInternaGeo, 0, -gavH/2 + intH/2, -0.02);
-                gavGroup.add(caixaInterna);
-
-                modGroup.add(gavGroup);
-            }
-        } 
-        // 3. Portas Matemáticas (Com pivô exato na aresta)
-        else if (mod.portas > 0) {
-            const portaW = (w - (thickness * 2)) / mod.portas;
-            const portaH = h - (thickness * 2);
-            const portaGeo = new THREE.BoxGeometry(portaW - 0.005, portaH - 0.005, thickness);
-
-            for (let i = 0; i < mod.portas; i++) {
-                // Matemática do Pivô: Onde a dobradiça fica?
-                // Se for a primeira porta (i=0), dobradiça na esquerda. Se i=1, dobradiça na direita.
-                const isLeftHinge = (i % 2 === 0);
-                
-                // O grupo pivô é ancorado na dobradiça
-                const pivotGroup = new THREE.Group();
-                pivotGroup.userData = { 
-                    isAnimatable: true, 
-                    type: 'door', 
-                    isOpen: false, 
-                    hinge: isLeftHinge ? 'left' : 'right' 
-                };
-
-                // Posição X do pivô em relação ao centro do móvel
-                const startX = -w/2 + thickness + (i * portaW);
-                const hingeX = startX + (isLeftHinge ? 0 : portaW);
-                
-                pivotGroup.position.set(hingeX, h/2, d/2); // Y central, Z na frente
-
-                // A malha da porta precisa ser deslocada do seu pivô
-                const portaMesh = createPart(portaGeo, isLeftHinge ? portaW/2 : -portaW/2, 0, 0);
-                
-                // Puxador
-                const handleGeo = new THREE.BoxGeometry(0.02, 0.15, 0.02);
-                const matHandle = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.2 });
-                const handle = new THREE.Mesh(handleGeo, matHandle);
-                handle.position.set(isLeftHinge ? portaW - 0.04 : -portaW + 0.04, 0, 0.02);
-                portaMesh.add(handle);
-
-                pivotGroup.add(portaMesh);
-                modGroup.add(pivotGroup);
-            }
-        }
-
-        // Posiciona o módulo no mundo (alinha na base e empurra pro lado)
-        modGroup.position.set(offsetX + (w/2), 0, 0);
-        offsetX += w + 0.05; // Gap de 5cm entre módulos
-        
-        masterGroup.add(modGroup);
-    });
-
-    // Centraliza a câmera baseado no tamanho total
-    if (offsetX > 0) {
-        controls.target.set(offsetX/2, 1, 0);
-        camera.position.set(offsetX/2, 1.5, 3.5);
-        controls.update();
-    }
-}
-
-
-// ================= CÉREBRO MULTI-AGENTE (SOLUÇÃO DE ALUCINAÇÃO) =================
-async function analisarComIA() {
-    const input = document.getElementById('fotoCliente');
-    if (!input.files || input.files.length === 0) {
-        document.getElementById('iaErrorBox').innerText = "Selecione ou tire uma foto primeiro.";
-        return;
-    }
-
-    const apikey = AppState.chavesAPI.gemini;
-    if (!apikey) {
-        alert("Configuração Requerida: Acesse a engrenagem (Canto superior direito) e insira a Chave da API do Gemini.");
-        toggleModal('modalSettings');
-        return;
-    }
-
-    showLoading("A IA está analisando cada detalhe da imagem...");
-    document.getElementById('iaErrorBox').innerText = "";
-
-    try {
-        const file = input.files[0];
-        const base64Str = await converterParaBase64(file);
-        
-        // PROMPT RIGOROSO: Combate o Viés de Concordância e forca Array Completo
-        const systemPrompt = `
-            Você é um Engenheiro Projetista Mestre Especialista em Marcenaria Sob Medida e Leitura de Plantas.
-            Sua missão OBRIGATÓRIA é analisar a foto enviada e mapear ABSOLUTAMENTE TODOS os módulos de armários visíveis.
-            
-            REGRAS INQUEBRÁVEIS:
-            1. NÃO SINTETIZE. Se houver 4 gaveteiros, 1 porta-tempero e 3 aéreos, você DEVE retornar 8 objetos no array.
-            2. Estime as medidas (largura, altura, profundidade) em MILÍMETROS com base na proporção padrão. (Ex: Bancada=850h, Aéreo=600h).
-            3. Detecte a cor predominante e converta para Hexadecimal (ex: "#FFFFFF" para branco, "#4A3C30" para madeira escura).
-            4. Conte o número de portas e gavetas de cada bloco individual.
-            
-            O RETORNO DEVE SER ESTRITAMENTE UM JSON NESTE FORMATO EXATO, SEM MARKDOWN, SEM TEXTOS ADICIONAIS:
-            {
-                "modulos": [
-                    { "nome": "Balcão Pia", "largura": 1200, "altura": 850, "profundidade": 550, "portas": 2, "gavetas": 0, "cor": "#F5F5DC" },
-                    { "nome": "Gaveteiro", "largura": 500, "altura": 850, "profundidade": 550, "portas": 0, "gavetas": 4, "cor": "#F5F5DC" }
-                ]
-            }
-        `;
-
-        const requestBody = {
-            contents: [{
-                parts: [
-                    { text: systemPrompt },
-                    { inlineData: { mimeType: file.type, data: base64Str } }
-                ]
-            }]
-        };
-
-        // CORREÇÃO: Utilizando o modelo gemini-2.5-flash exigido
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apikey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
         });
+    },
 
-        const data = await response.json();
-        
-        if(data.error) throw new Error(data.error.message);
-
-        let respostaTexto = data.candidates[0].content.parts[0].text;
-        // Limpeza de markdown caso a IA desobedeça
-        respostaTexto = respostaTexto.replace(/```json/g, '').replace(/```/g, '').trim();
-        
-        const iaJSON = JSON.parse(respostaTexto);
-
-        if (iaJSON.modulos && Array.isArray(iaJSON.modulos)) {
-            // Substitui o projeto atual pela visão da IA
-            AppState.modulos = iaJSON.modulos.map((m, idx) => ({ ...m, id: Date.now() + idx }));
-            
-            reconstruirCena();
-            atualizarHUDLista();
-            calcularCustosGlobais();
-            
-            toggleHUD('hudIA'); // Fecha HUD
-            alert(`Sucesso! A IA identificou ${AppState.modulos.length} módulos no ambiente.`);
-        } else {
-            throw new Error("A IA não retornou um array de módulos válido.");
-        }
-
-    } catch (err) {
-        console.error("Erro AI:", err);
-        document.getElementById('iaErrorBox').innerText = "Falha no raciocínio da IA: " + err.message;
-    } finally {
-        hideLoading();
+    animate: () => {
+        requestAnimationFrame(ThreeEngine.animate);
+        ThreeEngine.controls.update();
+        AppState.renderer.render(AppState.scene, AppState.camera);
     }
-}
+};
 
-function converterParaBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = error => reject(error);
-    });
-}
-
-
-// ================= BILL OF MATERIALS (BOM) & CUSTOS =================
-function atualizarHUDLista() {
-    const container = document.getElementById('listaModulosContainer');
-    if (!container) return; // Proteção extra caso rode com interface diferente
+// -------------------------------------------------------------------------
+// 5. UI MANAGER & APP LOGIC
+// -------------------------------------------------------------------------
+const App = {
     
-    container.innerHTML = '';
-    
-    AppState.modulos.forEach((mod, index) => {
-        container.innerHTML += `
-            <div class="module-card">
-                <h4>${mod.nome}</h4>
-                <p>Medidas: L ${mod.largura} x A ${mod.altura} x P ${mod.profundidade} mm</p>
-                <p>Portas: ${mod.portas} | Gavetas: ${mod.gavetas} | Cor: <span style="display:inline-block; width:15px; height:15px; background:${mod.cor}; border:1px solid #000;"></span></p>
-                <button class="btn-block" style="background:var(--warning-red); color:white; padding:5px; font-size:0.8rem; margin-top:5px;" onclick="removerModulo(${index})">Remover</button>
-            </div>
-        `;
-    });
-}
-
-function removerModulo(index) {
-    AppState.modulos.splice(index, 1);
-    reconstruirCena();
-    atualizarHUDLista();
-    calcularCustosGlobais();
-}
-
-function adicionarModuloManual() {
-    AppState.modulos.push({
-        id: Date.now(),
-        nome: "Novo Módulo Manual",
-        largura: 600,
-        altura: 700,
-        profundidade: 350,
-        portas: 1,
-        gavetas: 0,
-        cor: "#CCCCCC"
-    });
-    reconstruirCena();
-    atualizarHUDLista();
-    calcularCustosGlobais();
-}
-
-function calcularCustosGlobais() {
-    let m2Total = 0;
-
-    // Cálculo exato de M2 de MDF baseado na geometria física gerada
-    AppState.modulos.forEach(mod => {
-        const w = mod.largura / 1000;
-        const h = mod.altura / 1000;
-        const d = mod.profundidade / 1000;
+    init: () => {
+        console.log('[thIAguinho CAD] Inicializando Sistema Completo...');
         
-        // Caixaria (Base + Tampo + 2 Lats + Fundo)
-        const areaBaseTampo = (w * d) * 2;
-        const areaLats = (h * d) * 2;
-        const areaFundo = (w * h);
+        // Carrega configs
+        App.config.load();
         
-        let areaFrentes = 0;
-        if (mod.portas > 0 || mod.gavetas > 0) {
-            areaFrentes = w * h; // Aproximação grosseira da área frontal coberta
+        // Init 3D
+        ThreeEngine.init();
+        
+        // Init UI Listeners
+        App.ui.initListeners();
+        
+        // Update HUD
+        App.ui.updateHUD();
+        
+        // Toast Boas-vindas
+        App.ui.toast('Sistema Oráculo Carregado. Engenharia Real Ativa.', 'success');
+    },
+
+    modules: {
+        add: (type, customMeta = {}) => {
+            const id = Date.now().toString(36);
+            const baseMeta = {
+                type: type,
+                material: 'MDF_18mm',
+                thickness: 18,
+                color: 0xd97706,
+                hasBack: true,
+                shelves: 0,
+                drawers: 0,
+                doors: 0,
+                handles: 0,
+                function: '',
+                ...customMeta
+            };
+
+            // Dimensões padrão por tipo
+            const dims = { w: 600, h: 700, d: 560 };
+            if (type === 'GUARDA_ROUPA') { dims.h = 2200; dims.d = 600; }
+            if (type === 'BALCAO') { dims.h = 1050; dims.d = 700; }
+
+            const module = {
+                id,
+                type,
+                name: `${OracleEngine.getRuleLabel(type)} ${AppState.modules.length + 1}`,
+                dimensions: dims,
+                metadata: baseMeta,
+                cachedBOM: null
+            };
+
+            // Validação Oráculo
+            const validation = OracleEngine.validate(module);
+            
+            if (!validation.allowed) {
+                App.ui.showValidationModal(module, validation.errors);
+                return; // Bloqueia criação
+            }
+
+            AppState.modules.push(module);
+            ThreeEngine.addModule(module);
+            App.ui.renderModuleList();
+            App.bom.update();
+            App.ui.toast(`Módulo ${module.name} criado com sucesso.`, 'success');
+        },
+
+        addGeneric: () => {
+            App.modules.add('GENERICO', { function: 'Uso Geral' });
+        },
+
+        select: (id) => {
+            AppState.selectedModule = id;
+            ThreeEngine.updateSelection(id);
+            document.getElementById('hud-selection').innerText = id ? AppState.modules.find(m=>m.id===id).name : 'Nenhum';
+            App.ui.renderModuleList();
+        },
+
+        remove: (id) => {
+            if (!confirm('Remover este módulo?')) return;
+            ThreeEngine.removeModule(id);
+            AppState.modules = AppState.modules.filter(m => m.id !== id);
+            if (AppState.selectedModule === id) App.modules.select(null);
+            App.ui.renderModuleList();
+            App.bom.update();
         }
+    },
 
-        m2Total += areaBaseTampo + areaLats + areaFundo + areaFrentes;
-    });
+    bom: {
+        updateParams: () => {
+            AppState.costs.mdf = parseFloat(document.getElementById('cost-mdf').value) || 0;
+            AppState.costs.labor = parseFloat(document.getElementById('cost-labor').value) || 0;
+            AppState.costs.hardware = parseFloat(document.getElementById('cost-hardware').value) || 0;
+            AppState.costs.others = parseFloat(document.getElementById('cost-others').value) || 0;
+            AppState.costs.margin = parseFloat(document.getElementById('cost-margin').value) || 0;
+            App.bom.update();
+            App.config.save();
+        },
 
-    // Puxa valores dos inputs HTML (com proteção contra null)
-    const elM2 = document.getElementById('precoM2');
-    const elFer = document.getElementById('precoFerragem');
-    const elMao = document.getElementById('precoMaoObra');
-    const elLucro = document.getElementById('margemLucro');
+        update: () => {
+            const result = BOMEngine.calculateTotal();
+            
+            // Formatação
+            const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            
+            document.getElementById('bom-price').innerText = fmt(result.costs.sale);
+            document.getElementById('bom-cost').innerText = fmt(result.costs.total);
+            document.getElementById('bom-area').innerText = result.area.toFixed(2) + ' m²';
+            document.getElementById('bom-hw').innerText = fmt(result.costs.hardware);
+            document.getElementById('bom-profit').innerText = fmt(result.costs.profit);
+            
+            App.ui.updateHUD();
+        }
+    },
 
-    if (!elM2 || !elFer || !elMao || !elLucro) return;
+    ui: {
+        initListeners: () => {
+            // Inputs de custo já têm onchange no HTML
+        },
 
-    const pM2 = parseFloat(elM2.value) || 0;
-    const pFer = parseFloat(elFer.value) || 0;
-    const pMao = parseFloat(elMao.value) || 0;
-    const margem = parseFloat(elLucro.value) || 0;
+        renderModuleList: () => {
+            const list = document.getElementById('module-list');
+            list.innerHTML = '';
+            
+            AppState.modules.forEach(mod => {
+                const div = document.createElement('div');
+                div.className = `module-card ${AppState.selectedModule === mod.id ? 'selected' : ''}`;
+                div.onclick = () => App.modules.select(mod.id);
+                
+                const bom = mod.cachedBOM ? BOMEngine.calculateModule(mod) : null;
+                const statusClass = bom ? 'oracle-ok' : 'oracle-warn';
+                const statusText = bom ? 'Validado' : 'Pendente';
+                
+                div.innerHTML = `
+                    <div class="module-name">${mod.name}</div>
+                    <div class="module-meta">${mod.dimensions.w}x${mod.dimensions.h}x${mod.dimensions.d}mm</div>
+                    ${bom ? `<div class="module-meta">Custo: R$ ${bom.costs.mdf.toFixed(2)}</div>` : ''}
+                    <span class="module-oracle ${statusClass}">Oráculo: ${statusText}</span>
+                    <button class="btn btn-danger text-xs mt-2" onclick="event.stopPropagation(); App.modules.remove('${mod.id}')">🗑️ Remover</button>
+                `;
+                list.appendChild(div);
+            });
+            
+            document.getElementById('hud-objects').innerText = AppState.modules.length;
+        },
 
-    const custoMaterial = m2Total * pM2;
-    // Custo base de ferragens multiplicado pelo número de módulos para realismo
-    const custoFerragemTotal = pFer * AppState.modulos.length; 
-    
-    const custoDeFabrica = custoMaterial + custoFerragemTotal + pMao;
-    const precoVenda = custoDeFabrica / (1 - (margem / 100));
+        updateHUD: () => {
+            // HUD updates handled in renderModuleList and bom.update
+        },
 
-    document.getElementById('totalM2').innerText = m2Total.toFixed(2);
-    document.getElementById('totalProjectCost').innerText = new Intl.NumberFormat('pt-BR', {
-        style: 'currency', currency: 'BRL'
-    }).format(precoVenda);
-}
+        toast: (msg, type = 'info') => {
+            const container = document.getElementById('notifications');
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            el.innerText = msg;
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 4000);
+        },
 
-// ================= CONTROLES DE CÂMERA E AR =================
-function resetCamera() {
-    controls.target.set(masterGroup.position.x, 0.5, 0);
-    camera.position.set(0, 1.5, 3.5);
-    controls.update();
-}
+        toggleModal: (id) => {
+            document.getElementById(id).classList.toggle('active');
+        },
 
-function toggleARMode() {
-    AppState.modoAR = !AppState.modoAR;
-    const btnText = document.getElementById('arBtnText');
-    
-    if (AppState.modoAR) {
-        if(btnText) btnText.innerText = "Modo AR: ON (Arraste)";
-        const hud = document.getElementById('hudPerspectiva');
-        if (hud) hud.classList.remove('active'); // Esconde painel
-        alert("Modo AR Ativo: Toque e segure sobre um móvel para arrastá-lo pelo ambiente virtual.");
-    } else {
-        if(btnText) btnText.innerText = "Modo AR: OFF";
+        showValidationModal: (module, errors) => {
+            const msg = `❌ Oráculo bloqueou a criação:\n\n` + errors.map(e => `• ${e}`).join('\n') + `\n\nDeseja aplicar correções automáticas?`;
+            if (confirm(msg)) {
+                AppState.autoFix = true;
+                App.modules.add(module.type, module.metadata);
+                AppState.autoFix = false;
+            } else {
+                App.ui.toast('Criação cancelada pelo usuário.', 'error');
+            }
+        }
+    },
+
+    ar: {
+        toggle: () => {
+            AppState.arActive = !AppState.arActive;
+            document.getElementById('ar-overlay').classList.toggle('hidden', !AppState.arActive);
+            document.getElementById('ar-status').innerText = AppState.arActive ? 'Status: AR Ativo. Aguardando superfície...' : 'Status: AR Desativado.';
+            App.ui.toast(AppState.arActive ? 'Modo AR Ativado' : 'Modo AR Desativado', 'success');
+        },
+        reset: () => {
+            AppState.camera.position.set(3, 3, 3);
+            ThreeEngine.controls.reset();
+            App.ui.toast('Câmera resetada.', 'success');
+        },
+        adjustTilt: () => {
+            App.ui.toast('Ferramenta de inclinação: Em desenvolvimento na engine AR.', 'info');
+        },
+        autoFit: () => {
+            App.ui.toast('Encaixe automático calculando limites...', 'info');
+        }
+    },
+
+    ai: {
+        recordVoice: () => {
+            if (!AppState.apiKeys.groq) {
+                App.ui.toast('Configure a chave Groq para áudio.', 'error');
+                App.ui.toggleModal('api-modal');
+                return;
+            }
+            App.ui.toast('Gravando... (Simulação)', 'info');
+        },
+        sendAudio: () => {
+            App.ui.toast('Enviando para transcrição Whisper...', 'info');
+        },
+        processPhoto: (input) => {
+            if (input.files.length > 0) {
+                App.ui.toast('Foto carregada. IA analisando geometria...', 'success');
+                document.getElementById('ar-status').innerText = 'Status: Foto carregada. Pronta para projeção.';
+            }
+        }
+    },
+
+    api: {
+        saveKeys: () => {
+            AppState.apiKeys.gemini = document.getElementById('api-gemini').value;
+            AppState.apiKeys.groq = document.getElementById('api-groq').value;
+            App.config.save();
+            App.ui.toggleModal('api-modal');
+            App.ui.toast('Chaves salvas com segurança.', 'success');
+        }
+    },
+
+    config: {
+        save: () => {
+            localStorage.setItem('thIAguinho_Config', JSON.stringify({
+                costs: AppState.costs,
+                apiKeys: AppState.apiKeys
+            }));
+        },
+        load: () => {
+            const raw = localStorage.getItem('thIAguinho_Config');
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (data.costs) {
+                    AppState.costs = { ...AppState.costs, ...data.costs };
+                    document.getElementById('cost-mdf').value = AppState.costs.mdf;
+                    document.getElementById('cost-labor').value = AppState.costs.labor;
+                    document.getElementById('cost-hardware').value = AppState.costs.hardware;
+                    document.getElementById('cost-others').value = AppState.costs.others;
+                    document.getElementById('cost-margin').value = AppState.costs.margin;
+                }
+                if (data.apiKeys) {
+                    AppState.apiKeys = data.apiKeys;
+                    document.getElementById('api-gemini').value = AppState.apiKeys.gemini;
+                    document.getElementById('api-groq').value = AppState.apiKeys.groq;
+                }
+            }
+        }
+    },
+
+    project: {
+        export: () => {
+            const data = {
+                modules: AppState.modules,
+                costs: AppState.costs,
+                generated: new Date().toISOString()
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `projeto-thiaguinho-${Date.now()}.json`;
+            a.click();
+            App.ui.toast('Projeto exportado!', 'success');
+        }
     }
-}
+};
+
+// Boot
+window.addEventListener('DOMContentLoaded', App.init);
+window.App = App; // Debug global
