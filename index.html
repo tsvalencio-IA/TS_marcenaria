@@ -3,349 +3,306 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gerador de Projetos e Orçamentos para Marcenaria - thIAguinho Soluções</title>
-    <meta name="description" content="Sistema CAD 3D Inteligente com Orçamento Real, IA Multimodal e Validação de Engenharia.">
+    <title>CAD Marcenaria Sênior - thIAguinho Soluções</title>
     
-    <!-- Bibliotecas Externas -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800;900&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <link rel="stylesheet" href="style.css">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    
-    <style>
-        :root {
-            --primary: #2563eb; --primary-dark: #1e40af; --secondary: #0f172a;
-            --accent: #f59e0b; --bg: #f8fafc; --surface: #ffffff;
-            --text: #1e293b; --text-light: #64748b;
-            --danger: #ef4444; --success: #10b981;
-            --radius: 12px; --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
-        body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
-        /* Header */
-        header {
-            background: var(--surface); padding: 1rem 1.5rem; box-shadow: var(--shadow);
-            display: flex; justify-content: space-between; align-items: center; z-index: 100;
-        }
-        .brand { display: flex; align-items: center; gap: 0.75rem; }
-        .brand-logo {
-            width: 40px; height: 40px; background: var(--primary); border-radius: 8px;
-            display: grid; place-items: center; color: white; font-weight: bold; font-size: 1.2rem;
-        }
-        .brand-text h1 { font-size: 1rem; font-weight: 700; color: var(--secondary); }
-        .brand-text span { font-size: 0.75rem; color: var(--text-light); text-transform: uppercase; }
-        .header-actions { display: flex; gap: 0.5rem; }
-        
-        /* Buttons */
-        .btn {
-            padding: 0.6rem 1rem; border-radius: 8px; border: none; cursor: pointer;
-            font-weight: 600; font-size: 0.9rem; transition: all 0.2s;
-            display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-        }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-primary:hover { background: var(--primary-dark); }
-        .btn-secondary { background: #e2e8f0; color: var(--text); }
-        .btn-secondary:hover { background: #cbd5e1; }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-accent { background: var(--accent); color: white; }
-        
-        /* Main Layout */
-        main {
-            flex: 1; display: grid; grid-template-columns: 320px 1fr 340px;
-            gap: 1rem; padding: 1rem; overflow: hidden;
-        }
-        @media (max-width: 1024px) {
-            main { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; overflow-y: auto; }
-            body { overflow: auto; }
-        }
-        
-        /* Panels */
-        .panel {
-            background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
-            display: flex; flex-direction: column; overflow: hidden; height: 100%;
-        }
-        .panel-header {
-            padding: 1rem; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
-            font-weight: 700; display: flex; justify-content: space-between; align-items: center;
-        }
-        .panel-content { padding: 1rem; overflow-y: auto; flex: 1; }
-        
-        /* Canvas */
-        #canvas-container {
-            position: relative; width: 100%; height: 100%;
-            background: #eef2f6; border-radius: var(--radius); overflow: hidden;
-        }
-        canvas { display: block; width: 100%; height: 100%; outline: none; }
-        
-        /* HUD */
-        #hud {
-            position: absolute; top: 1rem; left: 1rem;
-            background: rgba(255, 255, 255, 0.95); padding: 0.75rem;
-            border-radius: 8px; font-size: 0.85rem; pointer-events: none; backdrop-filter: blur(4px);
-        }
-        #hud .row { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
-        #hud .label { color: var(--text-light); }
-        #hud .value { font-weight: 600; color: var(--secondary); }
-        
-        /* AI Section */
-        .ai-section { margin-bottom: 1.5rem; }
-        .ai-box {
-            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-            border: 1px solid #bfdbfe; border-radius: 10px; padding: 1rem; margin-bottom: 1rem;
-        }
-        .ai-title {
-            font-size: 0.9rem; font-weight: 700; color: var(--primary-dark);
-            margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
-        }
-        .ai-input-group { margin-bottom: 0.75rem; }
-        .ai-input {
-            width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px;
-            font-size: 0.9rem; resize: vertical; min-height: 60px;
-        }
-        .ai-input:focus { border-color: var(--primary); outline: none; }
-        .ai-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-        .ai-btn {
-            background: white; border: 1px solid #cbd5e1; padding: 0.6rem;
-            border-radius: 6px; font-size: 0.8rem; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; gap: 0.4rem;
-        }
-        .ai-btn:hover { border-color: var(--primary); color: var(--primary); }
-        .ai-btn.full { grid-column: span 2; background: var(--primary); color: white; border: none; }
-        .ai-btn.full:hover { background: var(--primary-dark); color: white; }
-        .ai-btn.recording { background: var(--danger); color: white; border-color: var(--danger); animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-        
-        /* Modules */
-        .module-list { display: flex; flex-direction: column; gap: 0.75rem; }
-        .module-card {
-            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
-            padding: 0.75rem; cursor: pointer; transition: all 0.2s; position: relative;
-        }
-        .module-card:hover { border-color: var(--primary); transform: translateY(-2px); }
-        .module-card.selected { border-color: var(--accent); background: #fffbeb; }
-        .module-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem; }
-        .module-meta { font-size: 0.75rem; color: var(--text-light); }
-        .module-oracle {
-            margin-top: 0.5rem; font-size: 0.7rem; padding: 0.25rem 0.5rem;
-            border-radius: 4px; display: inline-block;
-        }
-        .oracle-ok { background: #d1fae5; color: #065f46; }
-        .oracle-err { background: #fee2e2; color: #991b1b; }
-        .btn-add { width: 100%; margin-top: 0.5rem; background: var(--secondary); color: white; }
-        
-        /* AR / Cam */
-        .ar-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
-        .ar-status {
-            background: #f1f5f9; padding: 0.75rem; border-radius: 6px;
-            font-size: 0.8rem; margin-bottom: 1rem;
-        }
-        .file-input {
-            width: 100%; padding: 0.6rem; border: 1px dashed #cbd5e1;
-            border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.5rem; cursor: pointer;
-        }
-        
-        /* Costs */
-        .cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
-        .input-group { display: flex; flex-direction: column; gap: 0.25rem; }
-        .input-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-light); }
-        .input-group input {
-            padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9rem;
-        }
-        .input-group input:focus { border-color: var(--primary); outline: none; }
-        .bom-result {
-            background: var(--secondary); color: white; padding: 1rem; border-radius: 8px; margin-top: 1rem;
-        }
-        .bom-label { font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.25rem; }
-        .bom-value { font-size: 1.5rem; font-weight: 700; }
-        .bom-breakdown {
-            margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.2);
-            font-size: 0.8rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
-        }
-        
-        /* Modal */
-        .modal {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-            display: none; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            background: var(--surface); border-radius: var(--radius); padding: 1.5rem;
-            width: 100%; max-width: 400px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3);
-        }
-        .modal-header { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
-        .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
-        
-        /* Notifications */
-        #notifications {
-            position: fixed; bottom: 1rem; right: 1rem;
-            display: flex; flex-direction: column; gap: 0.5rem; z-index: 2000;
-        }
-        .toast {
-            background: var(--surface); padding: 1rem; border-radius: 8px;
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2);
-            border-left: 4px solid var(--primary); min-width: 280px;
-            animation: slideIn 0.3s ease;
-        }
-        .toast.error { border-left-color: var(--danger); }
-        .toast.success { border-left-color: var(--success); }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        
-        .hidden { display: none !important; }
-        .text-xs { font-size: 0.75rem; }
-        .mt-2 { margin-top: 0.5rem; }
-    </style>
 </head>
 <body>
 
-    <header>
-        <div class="brand">
-            <div class="brand-logo">th</div>
-            <div class="brand-text">
-                <h1>thIAguinho Soluções | CAD</h1>
-                <span>POWERED BY THIAGUINHO SOLUÇÕES</span>
-            </div>
-        </div>
-        <div class="header-actions">
-            <button class="btn btn-secondary" onclick="App.ui.toggleModal('api-modal')">⚙️ API Settings</button>
-            <button class="btn btn-primary" onclick="App.project.export()">💾 Salvar Projeto</button>
-        </div>
+    <header class="app-header" id="mainHeader">
+        <h1><i class="fas fa-cube"></i> <span class="brand">thIAguinho Soluções</span> | CAD CRM Sênior</h1>
+        <button class="icon-btn" onclick="window.App.ui.toggleModal('modalSettings')"><i class="fas fa-sliders-h"></i></button>
     </header>
 
-    <main>
-        <!-- Left Panel -->
-        <aside class="panel">
-            <div class="panel-header">
-                <span>Assistente & Módulos</span>
-            </div>
-            <div class="panel-content">
-                <!-- IA Assistant -->
-                <div class="ai-section">
-                    <div class="ai-box">
-                        <div class="ai-title">✨ Inteligência Artificial thIAguinho</div>
-                        
-                        <!-- Campo de Texto Adicionado -->
-                        <div class="ai-input-group">
-                            <textarea id="ai-prompt" class="ai-input" placeholder="Digite sua solicitação ou descreva o móvel..."></textarea>
-                        </div>
-                        
-                        <div class="ai-controls">
-                            <button id="btn-record" class="ai-btn" onclick="App.ai.toggleRecord()">🎤 Gravar Voz</button>
-                            <button id="btn-send-audio" class="ai-btn" onclick="App.ai.sendAudio()" disabled>📤 Enviar Áudio</button>
-                            <button class="ai-btn" onclick="App.ai.sendText()">📝 Enviar Texto</button>
-                            <button class="ai-btn" onclick="App.ai.generateImage()">🖼️ Gerar Imagem</button>
-                            <button class="ai-btn full" onclick="document.getElementById('photo-input').click()">
-                                📷 Foto da Parede / Ambiente
-                            </button>
-                        </div>
-                        <input type="file" id="photo-input" class="hidden" accept="image/*" onchange="App.ai.processPhoto(this)">
-                        <div class="text-xs text-light mt-2">Gerar Marcenaria de Precisão a partir de contexto visual, voz ou texto.</div>
-                    </div>
-                </div>
+    <div class="footer-signature" id="mainSignature">ENGINE: ORÁCULO ABSOLUTO (FÍSICA REAL 100%)</div>
 
-                <!-- Modules -->
-                <div class="mb-2 font-bold text-sm">Módulos do Projeto</div>
-                <div class="text-xs text-light mb-2">Segure o dedo sobre o móvel no 3D para abrir o Editor Live.</div>
-                
-                <div id="module-list" class="module-list">
-                    <!-- Modules injected by JS -->
-                </div>
+    <div class="top-tools" id="toolModeContainer">
+        <button class="tool-btn active" id="btnOrbit" onclick="window.App.ar.setModoCamera('orbit')">
+            <i class="fas fa-hand-pointer"></i> Tocar & Abrir (Interação Física)
+        </button>
+        <button class="tool-btn" id="btnMove" onclick="window.App.ar.setModoCamera('move')">
+            <i class="fas fa-arrows-alt"></i> Arrastar Peça Livremente
+        </button>
+        <button class="tool-btn" id="btnAddComp" onclick="window.App.ar.setModoCamera('add_comp')">
+            <i class="fas fa-plus"></i> Inserir no Clique
+        </button>
+    </div>
 
-                <button class="btn btn-add" onclick="App.modules.addGeneric()">➕ Novo Módulo Avulso</button>
-            </div>
-        </aside>
+    <div id="canvas-container">
+        <canvas id="cad-canvas"></canvas>
+        <canvas id="cv-canvas" style="display:none;"></canvas>
+    </div>
+    <div id="longPressIndicator"></div>
 
-        <!-- Center: Canvas -->
-        <section id="canvas-container">
-            <canvas id="cad-canvas"></canvas>
-            <div id="hud">
-                <div class="row"><span class="label">Modo:</span><span class="value" id="hud-mode">Oráculo Ativo</span></div>
-                <div class="row"><span class="label">Objetos:</span><span class="value" id="hud-objects">0</span></div>
-                <div class="row"><span class="label">Seleção:</span><span class="value" id="hud-selection">Nenhum</span></div>
-            </div>
-            <div id="ar-overlay" class="hidden" style="position:absolute; inset:0; pointer-events:none; border: 2px dashed var(--accent);">
-                <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.7); color:white; padding:0.5rem 1rem; border-radius:4px;">
-                    Modo AR: Aponte para superfície plana
+    <button id="btnExitPrint" onclick="window.App.ar.exitPrintMode()">SAIR DO MODO DE FOTOGRAFIA</button>
+
+    <div class="floating-controls" id="mainControls">
+        <button class="fab-btn primary" onclick="window.App.ui.abrirHUD('hudIA')">
+            <i class="fas fa-brain"></i><span>Sênior IA</span>
+        </button>
+        <button class="fab-btn" onclick="window.App.ui.abrirHUD('hudLista')">
+            <i class="fas fa-cubes"></i><span>Cena Atual</span>
+        </button>
+        <button class="fab-btn" onclick="window.App.ui.abrirHUD('perspectiveHUD')">
+            <i class="fas fa-vr-cardboard"></i><span>Estúdio AR</span>
+        </button>
+        <button class="fab-btn success" onclick="window.App.ui.abrirHUD('hudOrcamento')">
+            <i class="fas fa-file-invoice-dollar"></i><span>Custos Fabris</span>
+        </button>
+    </div>
+
+    <div id="hudIA" class="bottom-sheet">
+        <div class="sheet-header">
+            <h3><i class="fas fa-robot"></i> Cérebro de Marcenaria IA</h3>
+            <button class="close-btn" onclick="window.App.ui.fecharHUDs()">×</button>
+        </div>
+        <div class="sheet-body">
+            <div class="grid-2-col">
+                <button class="btn-block primary" id="btnRecord" onclick="window.App.ai.toggleRecording()">
+                    <i class="fas fa-microphone"></i> Gravar Voz
+                </button>
+                <div class="input-group" style="margin: 0;">
+                    <input type="file" id="audioFile" style="display:none;" onchange="window.App.ai.uploadAudio(this)">
+                    <label for="audioFile" class="btn-block" style="background:#546e7a; color:#fff; cursor:pointer; margin:0;">
+                        <i class="fas fa-upload"></i> Enviar Áudio
+                    </label>
                 </div>
             </div>
-        </section>
-
-        <!-- Right Panel -->
-        <aside class="panel">
-            <div class="panel-header">
-                <span>AR / Cam & Custos</span>
+            <p id="transcriptionText" style="font-size:0.9rem; color:var(--success-green); font-weight:800; text-align:center; margin:15px 0;"></p>
+            <div class="input-group">
+                <label>Instruções Complexas (Prompt Livre)</label>
+                <textarea id="textoAdicional" placeholder="Ex: Crie um armário superior em L com portas basculantes azuis..."></textarea>
             </div>
-            <div class="panel-content">
-                <div class="mb-2 font-bold text-sm">Realidade Aumentada (AR) e Câmera</div>
-                <div class="ar-status" id="ar-status">Status: Câmera inativa. Carregue foto ou ative AR.</div>
-                
-                <div class="ar-controls">
-                    <button class="btn btn-secondary text-xs" onclick="App.ar.toggle()">📱 Projetar na Foto (AR)</button>
-                    <button class="btn btn-secondary text-xs" onclick="App.ar.reset()">🔄 Resetar Cam</button>
-                    <button class="btn btn-secondary text-xs" onclick="App.ar.adjustTilt()">📐 Inclinação Parede</button>
-                    <button class="btn btn-secondary text-xs" onclick="App.ar.autoFit()">🧲 Encaixe Auto</button>
-                </div>
-
-                <hr style="border:0; border-top:1px solid #e2e8f0; margin: 1rem 0;">
-
-                <div class="mb-2 font-bold text-sm">Custos e Orçamento (BOM)</div>
-                
-                <div class="cost-grid">
-                    <div class="input-group">
-                        <label>MDF/Material (R$/m²)</label>
-                        <input type="number" id="cost-mdf" value="85.00" step="0.01" onchange="App.bom.updateParams()">
-                    </div>
-                    <div class="input-group">
-                        <label>Mão de Obra (R$/m²)</label>
-                        <input type="number" id="cost-labor" value="80.00" step="0.01" onchange="App.bom.updateParams()">
-                    </div>
-                    <div class="input-group">
-                        <label>Ferragens (R$)</label>
-                        <input type="number" id="cost-hardware" value="0.00" step="0.01" onchange="App.bom.updateParams()">
-                    </div>
-                    <div class="input-group">
-                        <label>Outros/Frete (R$)</label>
-                        <input type="number" id="cost-others" value="0.00" step="0.01" onchange="App.bom.updateParams()">
-                    </div>
-                    <div class="input-group" style="grid-column: span 2;">
-                        <label>Margem de Lucro Desejada (%)</label>
-                        <input type="number" id="cost-margin" value="30" step="1" onchange="App.bom.updateParams()">
-                    </div>
-                </div>
-
-                <div class="bom-result">
-                    <div class="bom-label">Preço de Venda Sugerido:</div>
-                    <div class="bom-value" id="bom-price">R$ 0,00</div>
-                    <div class="bom-breakdown">
-                        <div>Custo Total: <span id="bom-cost">R$ 0,00</span></div>
-                        <div>Área MDF: <span id="bom-area">0.00 m²</span></div>
-                        <div>Ferragens: <span id="bom-hw">R$ 0,00</span></div>
-                        <div>Lucro: <span id="bom-profit">R$ 0,00</span></div>
-                    </div>
-                </div>
+            <div class="input-group">
+                <input type="file" id="fotoCliente" accept="image/*" style="display:none;" onchange="window.App.cv.processarImagem(this)">
+                <label for="fotoCliente" class="btn-block action-btn" style="margin:0; cursor:pointer;">
+                    <i class="fas fa-camera"></i> Anexar e Analisar Ambiente (Visão)
+                </label>
             </div>
-        </aside>
-    </main>
+            <div id="imgPreviewContainer"><img id="imagePreview" src=""></div>
+            <button class="btn-block success" style="margin-top:25px; padding:20px; font-size:1.1rem;" onclick="window.App.ai.generateWithOracle()">
+                <i class="fas fa-magic"></i> Gerar Projeto de Marcenaria
+            </button>
+        </div>
+    </div>
 
-    <!-- API Modal -->
-    <div class="modal" id="api-modal">
-        <div class="modal-content">
-            <div class="modal-header">API Settings</div>
-            <div class="input-group mb-2">
-                <label>Gemini 2.5 Flash Key (Cérebro/Visão)</label>
-                <input type="password" id="api-gemini" placeholder="sk-...">
+    <div id="hudLista" class="bottom-sheet">
+        <div class="sheet-header">
+            <h3><i class="fas fa-list"></i> Composição do Ambiente</h3>
+            <button class="close-btn" onclick="window.App.ui.fecharHUDs()">×</button>
+        </div>
+        <div class="sheet-body">
+            <p style="font-size: 0.9rem; color: #555; margin-bottom:20px; text-align:center; font-weight:700;">
+                <i class="fas fa-info-circle"></i> Pressione e segure o dedo sobre a peça no 3D para editar a engenharia.
+            </p>
+            <div id="listaModulosContainer"></div>
+            <button class="btn-block primary" style="margin-top:20px;" onclick="window.App.modules.addGeneric()">
+                <i class="fas fa-plus"></i> Inserir Novo Módulo Manualmente
+            </button>
+            <button class="btn-block success" style="margin-top:15px;" onclick="window.App.modules.exportarProjeto()">
+                <i class="fas fa-file-export"></i> Exportar Projeto (JSON)
+            </button>
+        </div>
+    </div>
+
+    <div id="perspectiveHUD" class="bottom-sheet">
+        <div class="sheet-header">
+            <h3><i class="fas fa-camera"></i> Estúdio de Posicionamento AR</h3>
+            <button class="close-btn" onclick="window.App.ui.fecharHUDs()">×</button>
+        </div>
+        <div class="sheet-body">
+            <div class="switch-container">
+                <div class="switch-btn" id="sw-peca" onclick="window.App.ar.setModoInteracao('peca')">Mover Peça Única</div>
+                <div class="switch-btn active" id="sw-projeto" onclick="window.App.ar.setModoInteracao('projeto')">Mover Todo O Projeto</div>
             </div>
-            <div class="input-group mb-2">
-                <label>Groq API Key (Áudio Whisper)</label>
-                <input type="password" id="api-groq" placeholder="gsk_...">
+            <button class="btn-block primary" onclick="window.App.ar.toggleAR()">
+                <i class="fas fa-image"></i> <span id="arBtnText">Ativar Fundo Real Fotográfico</span>
+            </button>
+            <div class="input-group" style="margin-top: 25px;">
+                <label>Escala do Projeto Geral</label>
+                <input type="range" id="camScale" min="0.1" max="5" step="0.05" value="1" oninput="window.App.ar.applyTransform()">
             </div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="App.ui.toggleModal('api-modal')">Cancelar</button>
-                <button class="btn btn-primary" onclick="App.api.saveKeys()">Salvar Chaves</button>
+            <div class="input-group">
+                <label>Giro do Ambiente (Eixo Y)</label>
+                <input type="range" id="camRotY" min="-3.14" max="3.14" step="0.05" value="0" oninput="window.App.ar.applyTransform()">
+            </div>
+            <div class="input-group">
+                <label>Inclinação da Parede (Eixo X)</label>
+                <input type="range" id="camRotX" min="-1.5" max="1.5" step="0.01" value="0" oninput="window.App.ar.applyTransform()">
+            </div>
+            <div class="grid-2-col" style="margin-top:30px;">
+                <button class="btn-block success" onclick="window.App.ar.enterPrintMode()"><i class="fas fa-camera"></i> Câmera Limpa (Foto)</button>
+                <button class="btn-block danger" onclick="window.App.ar.resetAR()"><i class="fas fa-undo"></i> Resetar Eixos</button>
             </div>
         </div>
     </div>
 
-    <div id="notifications"></div>
+    <div id="hudOrcamento" class="bottom-sheet">
+        <div class="sheet-header">
+            <h3><i class="fas fa-calculator"></i> Orçamento Industrial Sênior</h3>
+            <button class="close-btn" onclick="window.App.ui.fecharHUDs()">×</button>
+        </div>
+        <div class="sheet-body">
+            <div class="price-summary">
+                <h4>Valor Final Sugerido</h4>
+                <p id="bom-price">R$ 0,00</p>
+            </div>
+            <p style="font-size:0.85rem; color:#555; text-align:center; font-weight:700; margin-bottom: 25px;">
+                Cálculo de volumetria exata granular (+15% perda), ferragens unitárias e materiais customizados.
+            </p>
+
+            <div class="grid-2-col" style="margin-bottom: 25px;">
+                <button class="btn-block action-btn" onclick="window.CutPlanEngine.generate()"><i class="fas fa-border-all"></i> Analisar Plano Corte</button>
+                <button class="btn-block primary" onclick="window.ExportEngine.exportDXF()"><i class="fas fa-file-export"></i> Exportar DXF CNC</button>
+            </div>
+            
+            <div id="cutPlanContainer" style="margin-bottom: 25px;"></div>
+
+            <div class="grid-2-col">
+                <div class="input-group"><label>MDF Base (R$/m²)</label><input type="number" id="cost-mdf" value="85.00" onchange="window.App.bom.updateParams()"></div>
+                <div class="input-group"><label>M. Obra Base (R$/m²)</label><input type="number" id="cost-labor" value="80.00" onchange="window.App.bom.updateParams()"></div>
+                <div class="input-group"><label>Ferragens Adicionais (R$)</label><input type="number" id="cost-hardware" value="0.00" onchange="window.App.bom.updateParams()"></div>
+                <div class="input-group"><label>Margem de Lucro (%)</label><input type="number" id="cost-margin" value="40" onchange="window.App.bom.updateParams()"></div>
+            </div>
+            <div class="bom-detail"><span>Consumo de Chapa Físico:</span><span id="bom-area" style="color:var(--primary-dark);">0.00 m²</span></div>
+            <div class="bom-detail">
+                <span>Ferragens Contabilizadas:</span> 
+                <div style="text-align: right;"><span id="bom-hw-cost" style="color:var(--primary-dark);">R$ 0,00</span><div class="bom-hardware-list" id="bom-hw-list">Nenhuma ferragem identificada.</div></div>
+            </div>
+            <div class="bom-detail"><span>Custos Materiais Total (MDF + HW):</span><span id="bom-mat" style="color:var(--primary-dark);">R$ 0,00</span></div>
+            <div class="bom-detail"><span>Custo Fabril (Mão de Obra Lógica):</span><span id="bom-mobra" style="color:var(--primary-dark);">R$ 0,00</span></div>
+            <div class="bom-detail" style="color:var(--success-green); border-top: 3px dashed #E0E0E0; padding-top:15px; margin-top: 15px;"><span>Lucro Estimado (Líquido):</span><span id="bom-profit">R$ 0,00</span></div>
+        </div>
+    </div>
+
+    <div id="floatingEditor" class="floating-editor">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 3px solid var(--border-soft); padding-bottom:15px; margin-bottom:20px;">
+            <h4 style="color:var(--ai-blue); font-size:1.1rem; font-weight:900; text-transform: uppercase;"><i class="fas fa-tools"></i> Engenharia da Peça</h4>
+            <button class="close-btn" onclick="window.App.ui.fecharEditor()">×</button>
+        </div>
+        <input type="hidden" id="eId">
+        
+        <div class="grid-2-col">
+            <div class="input-group">
+                <label>Categoria Tipológica</label>
+                <select id="eT" onchange="window.App.ui.syncToState()">
+                    <option value="armario">Armário / Aéreo</option><option value="balcao">Balcão de Atendimento</option><option value="guarda_roupa">Guarda-Roupa</option><option value="mesa">Mesa (Trabalho/Jantar)</option><option value="cadeira">Cadeira / Banqueta</option><option value="sofa">Sofá / Poltrona</option><option value="puff">Puff / Assento Extra</option><option value="painel_tv">Painel de TV / Home</option><option value="rack">Rack Baixo</option><option value="nicho">Nicho Decorativo</option><option value="porta_avulsa">Porta Avulsa (Solo)</option><option value="gaveta_avulsa">Gaveta Avulsa (Solo)</option><option value="painel_fixo">Painel Fixo (Madeira)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Formato Geométrico</label>
+                <select id="eFormato" onchange="window.App.ui.syncToState()">
+                    <option value="reto">Linha Reta (Padrão)</option><option value="L_esq">Módulo em L (Retorno Esquerdo)</option><option value="L_dir">Módulo em L (Retorno Direito)</option><option value="canto_obliquo">Canto Oblíquo (Quina 45º)</option><option value="canto_curvo">Canto Curvo</option><option value="redondo">Geometria Cilíndrica/Redonda</option><option value="triangular">Prisma Triangular</option><option value="dobravel">Sistema Articulado/Dobrável</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Subdivisão de Chapa (Layout Interno)</label>
+            <div class="grid-2-col">
+                <select id="eLayoutInt" onchange="window.App.ui.syncToState()">
+                    <option value="apenas_portas">Volume Total p/ Portas</option><option value="apenas_gavetas">Volume Total p/ Gavetas</option><option value="top_drawers">Misto: Gavetas no Topo</option><option value="bottom_drawers">Misto: Gavetas na Base</option><option value="left_drawers">Misto: Gavetas à Esquerda</option><option value="right_drawers">Misto: Gavetas à Direita</option><option value="gavetas_internas">Gavetas Embutidas (Atrás da Porta)</option><option value="ilha_dupla">Ilha Dupla (Acesso Frente e Trás)</option>
+                </select>
+                <select id="eDobradica" onchange="window.App.ui.syncToState()">
+                    <option value="esq">Dobradiça Lado Esquerdo</option><option value="dir">Dobradiça Lado Direito</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid-2-col">
+            <div class="input-group">
+                <label>Material Físico / Cor Global</label>
+                <select id="eMat" onchange="window.App.ui.syncToState()">
+                    <option value="amadeirado_padrao">MDF Amadeirado Padrão</option><option value="louro_freijo">MDF Louro Freijó</option><option value="carvalho_hanover">MDF Carvalho Hanover</option><option value="nogueira_cadiz">MDF Nogueira Cádiz</option><option value="tauari">MDF Tauari</option><option value="mdf_branco_tx">MDF Branco Ártico TX</option><option value="mdf_branco_diamante">MDF Branco Diamante (Brilho)</option><option value="mdf_preto_tx">MDF Preto TX</option><option value="mdf_grafite">MDF Grafite</option><option value="mdf_cinza_sagrado">MDF Cinza Sagrado</option><option value="mdf_azul_petroleo">MDF Azul Petróleo (Fosco)</option><option value="mdf_verde_savia">MDF Verde Sálvia</option><option value="mdf_rosa_milkshake">MDF Rosa Milkshake</option><option value="mdf_areia">MDF Areia</option><option value="misto">Misto (Caixa Branca, Frente Cor)</option><option value="vidro_incolor">Vidro Incolor 8mm</option><option value="vidro_fume">Vidro Fumê 8mm</option><option value="vidro_bronze">Vidro Bronze 8mm</option><option value="vidro_reflecta">Vidro Reflecta Bronze</option><option value="metal_preto">Metalon Preto Fosco</option><option value="metal_dourado">Metal Dourado / Inox</option><option value="metal_cobre">Metal Cobre</option><option value="tecido_linho_cinza">Tecido Linho Cinza</option><option value="tecido_couro_marrom">Couro Ecológico Marrom</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Mecanismo de Abertura</label>
+                <select id="eA" onchange="window.App.ui.syncToState()">
+                    <option value="giro">Dobradiça Tradicional</option><option value="correr">Trilhos de Alumínio</option><option value="basculante">Pistão a Gás</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Opcionais Estruturais e de Luxo</label>
+            <div style="display:flex; gap:25px; flex-wrap:wrap;">
+                <label class="checkbox-group"><input type="checkbox" id="eRipado" onchange="window.App.ui.syncToState()"> Ripado Externo (Frontal)</label>
+                <label class="checkbox-group"><input type="checkbox" id="eVidro" onchange="window.App.ui.syncToState()"> Tampo Superior de Vidro</label>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Quantidade de Componentes</label>
+            <div class="grid-4-col">
+                <div><label>Portas</label><input type="number" id="ePo" title="Portas Físicas" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Gavetas</label><input type="number" id="eG" title="Gavetas com Corrediça" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Prat. In</label><input type="number" id="ePr" title="Prateleiras Internas" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Prat. Ex</label><input type="number" id="ePratExt" title="Prateleiras Externas" oninput="window.App.ui.syncToState()"></div>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label style="color:var(--ai-blue);">Tamanho Fixo Global Frentes (0 = Auto)</label>
+            <div class="grid-2-col">
+                <input type="number" id="eCompW" placeholder="Largura (mm)" oninput="window.App.ui.syncToState()">
+                <input type="number" id="eCompH" placeholder="Altura (mm)" oninput="window.App.ui.syncToState()">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label class="checkbox-group"><input type="checkbox" id="eFrentesInternas" onchange="window.App.ui.syncToState()"> Frentes p/ Lado de Dentro (Interior do L)</label>
+        </div>
+        <div class="input-group">
+            <label style="color:var(--ai-blue);">Personalização Individual Avançada (Granular)</label>
+            <div id="customFrentesContainer" style="background:#f5f5f5; padding:15px; border-radius:8px; border:1px solid #ddd; max-height:250px; overflow-y:auto;">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Dimensões Geométricas Físicas (Milímetros)</label>
+            <div class="grid-4-col">
+                <div><label>Largura</label><input type="number" id="eL" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Altura</label><input type="number" id="eAl" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Profund.</label><input type="number" id="eP" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Braço do L</label><input type="number" id="eRetL" oninput="window.App.ui.syncToState()"></div>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Posicionamento Espacial Exato (Milímetros / Graus)</label>
+            <div class="grid-4-col">
+                <div><label>Eixo X</label><input type="number" id="ePx" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Eixo Y</label><input type="number" id="ePy" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Eixo Z</label><input type="number" id="ePz" oninput="window.App.ui.syncToState()"></div>
+                <div><label>Rotação Y</label><input type="number" id="eRy" oninput="window.App.ui.syncToState()"></div>
+            </div>
+        </div>
+        
+        <button class="btn-block danger" style="margin-top: 30px; padding: 20px; font-size:1.1rem;" onclick="window.App.modules.removeCurrent()">
+            <i class="fas fa-trash-alt"></i> Eliminar Definitivamente o Módulo
+        </button>
+    </div>
+
+    <div id="modalSettings" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="color:var(--primary-dark); margin-bottom:20px; font-size:1.4rem;"><i class="fas fa-cogs"></i> Chaves de IA (APIs)</h3>
+            <div class="input-group mb-2"><label>Gemini 2.5 Flash Key</label><input type="password" id="api-gemini"></div>
+            <div class="input-group mb-2"><label>Groq API Key</label><input type="password" id="api-groq"></div>
+            <div class="grid-2-col" style="margin-top:30px;">
+                <button class="btn-block" onclick="window.App.ui.toggleModal('modalSettings')">Cancelar</button>
+                <button class="btn-block success" onclick="window.App.api.saveKeys()">Guardar e Aplicar</button>
+            </div>
+        </div>
+    </div>
+    <div id="statusOverlay" class="status-overlay"><div style="display:flex; flex-direction:column; align-items:center;"><div class="loader"></div><p id="statusText">Oráculo Analisando...</p></div></div>
+    <div id="toast"><i class="fas fa-info-circle"></i> <span id="toastMessage">Notificação</span></div>
 
     <script src="app.js"></script>
 </body>
